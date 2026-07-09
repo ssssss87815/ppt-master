@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "registry_path_note": "JSON is used for the first durable registry artifact because the current Hermes runner environment does not have PyYAML installed; the repo-local shape mirrors the recommended lane-registry.yaml schema from docs/kanban-auto-chain-lane-pattern.md and can be renamed to YAML later without changing lane semantics.",
+  "lanes": [
+    {
+      "lane_id": "guard-proof",
+      "lane_identity": {
+        "predecessor_ids": [
+          "t_a997962b",
+          "t_4cb0b407",
+          "t_8bc13a72",
+          "t_63771841",
+          "t_b42990ab",
+          "t_225ee6e2",
+          "t_da9d74a9",
+          "t_b6b4f2a0"
+        ],
+        "allowed_title_prefixes": [
+          "productization: auto-next doc-governed illegal transition guard:"
+        ],
+        "spawn_title_prefix": "productization: auto-next doc-governed illegal transition guard",
+        "autoclose_title_prefix": "productization: auto-next doc-governed illegal transition guard:"
+      },
+      "successor_field_name": "next_smallest_guard_candidate",
+      "changed_file_policy": {
+        "allowed_prefixes": [
+          "productization/tests/",
+          "productization/backend/orchestrator/workflow-orchestrator.ts"
+        ]
+      },
+      "verification_command_policy": {
+        "allowed_commands": [
+          "npx --yes tsx productization/tests/slice1-illegal-transitions.test.ts",
+          "npx --yes tsx productization/tests/revision-export-slice.test.ts",
+          "npx --yes tsx productization/tests/workflow-orchestrator-slice1-routing.test.ts",
+          "npx --yes tsx productization/tests/dispatch-routing.test.ts"
+        ],
+        "allow_tmp_tsx_probe": true
+      },
+      "duplicate_suppression_key_choice": {
+        "strategy": "normalized_successor_title",
+        "reason": "Suppress repeated narrow next-slice spawn attempts across repeated review cycles without depending on task ids."
+      },
+      "clean_stop_condition": [
+        "stop when no successor candidate is declared",
+        "stop when an equivalent open task already exists",
+        "stop when a recent duplicate candidate was already spawned",
+        "stop when the lane payload fails policy checks"
+      ],
+      "human_decision_boundary": [
+        "block when doc anchors are missing",
+        "block when verification requires a real repo/environment fix",
+        "block when the next step needs product or scope judgment"
+      ],
+      "autoclose_messages": {
+        "result": "auto-accepted doc-governed illegal-transition guard proof slice",
+        "summary": "Auto-closing narrow review-required guard/proof slice: doc-governed illegal-transition lane, needs_input only, focused verification bundle only, and explicit successor candidate present in the worker handoff."
+      },
+      "doc_anchors": [
+        ".hermes/plans/2026-07-02_pptmaster-kanban-baseline.zh.md",
+        ".hermes/archives/2026-07-02_yesterday-to-now-summary-and-improvements.md",
+        "docs/zh/pptmaster-productization-module-boundaries-and-interface-draft.md",
+        "docs/zh/pptmaster-productization-slice-1-confirmation-lock-spec.md"
+      ]
+    },
+    {
+      "lane_id": "workbench-ui",
+      "lane_identity": {
+        "predecessor_ids": [
+          "t_d0a92868"
+        ],
+        "allowed_title_prefixes": [
+          "productization: minimal real workbench UI slice over existing contracts",
+          "productization: auto-next minimal workbench UI slice:",
+          "productization: confirmation submission ui wiring over existing project view model",
+          "productization: confirmation submission ui wiring over existing view model",
+          "productization: expose confirmation submission vm in project workbench shell",
+          "productization: render confirmation submission payload in project shell"
+        ],
+        "spawn_title_prefix": "productization: auto-next minimal workbench UI slice",
+        "autoclose_title_prefix": "productization: render confirmation submission payload in project shell"
+      },
+      "successor_field_name": "next_smallest_ui_candidate",
+      "changed_file_policy": {
+        "allowed_prefixes": [
+          "productization/app/viewmodels/project-view-model.ts",
+          "productization/app/viewmodels/confirmation-submission-view-model.ts",
+          "productization/backend/services/project-view-service.ts",
+          "productization/backend/adapter/pptmaster-adapter.ts",
+          "productization/tests/project-workbench-ui-slice.test.ts",
+          "productization/tests/project-workbench-confirmation-submission-ui.test.ts",
+          "productization/tests/project-workbench-shell-confirmation-submission-integration.test.ts",
+          "productization/app/viewmodels/project-shell-view-model.ts",
+          "productization/tests/project-shell-confirmation-submission-render.test.ts"
+        ]
+      },
+      "verification_command_policy": {
+        "allowed_commands": [
+          "npx --yes tsx productization/tests/project-workbench-ui-slice.test.ts",
+          "npx --yes tsx productization/tests/project-workbench-confirmation-submission-ui.test.ts",
+          "npx --yes tsx productization/tests/project-workbench-shell-confirmation-submission-integration.test.ts",
+          "npx --yes tsx productization/tests/slice1-happy-path.test.ts",
+          "npx --yes tsx productization/tests/project-view-checkpoint-slice.test.ts",
+          "npx --yes tsx productization/tests/revision-export-slice.test.ts",
+          "npx --yes tsx productization/tests/preview-export-artifact-richness.test.ts",
+          "npx --yes tsx productization/tests/project-shell-confirmation-submission-render.test.ts"
+        ],
+        "allow_tmp_tsx_probe": true
+      },
+      "duplicate_suppression_key_choice": {
+        "strategy": "normalized_successor_title",
+        "reason": "Use the semantic next UI slice label to suppress duplicate auto-next cards across review reruns."
+      },
+      "clean_stop_condition": [
+        "stop when no next_smallest_ui_candidate is declared",
+        "stop when an equivalent open task already exists",
+        "stop when a recent duplicate candidate was already spawned",
+        "stop when the lane payload fails policy checks"
+      ],
+      "human_decision_boundary": [
+        "block when the next UI step exposes a real contract gap",
+        "block when the next step requires a UX or product scope choice",
+        "block when verification requires a real repo/environment fix"
+      ],
+      "autoclose_messages": {
+        "result": "auto-accepted minimal workbench-ui slice",
+        "summary": "Auto-closing narrow review-required workbench/UI slice: minimal product-shell lane, needs_input only, focused project-view verification bundle only, and explicit UI successor present in the worker handoff."
+      },
+      "doc_anchors": [
+        "docs/productization-current-status.md",
+        "docs/zh/productization-current-status.md",
+        "docs/productization-architecture.md",
+        "docs/zh/productization-architecture.md",
+        "docs/zh/pptmaster-productization-module-boundaries-and-interface-draft.md"
+      ],
+      "worker_handoff_note": "If this slice should auto-chain, include a JSON review-required handoff comment with changed_files, verification_commands, next_smallest_ui_candidate, and the exact next smallest UI slice name. For the current lane, default that successor to confirmation submission UI wiring over the existing project view model without widening backend contracts unless the docs or repo state prove a smaller user-facing slice instead."
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "name": "pptmaster-productization-slice-tests",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "slice1:happy": "tsx productization/tests/slice1-happy-path.test.ts",
+    "slice1:illegal": "tsx productization/tests/slice1-illegal-transitions.test.ts",
+    "slice1:strategist-honesty": "tsx productization/tests/submit-confirmations-strategist-artifact-honesty.test.ts",
+    "slice1:spec-ready-gating": "tsx productization/tests/spec-ready-generation-gating.test.ts",
+    "slice1:view-strategist-honesty": "tsx productization/tests/project-view-strategist-honesty.test.ts",
+    "slice2:generation": "tsx productization/tests/slice2-generation-flow.test.ts",
+    "slice3:delivery": "tsx productization/tests/slice3-delivery-view-model.test.ts",
+    "slice2:orchestrator-gating": "tsx productization/tests/generation-orchestrator-gating.test.ts",
+    "runtime:project-manager": "tsx productization/tests/project-manager-runtime-bridge.test.ts",
+    "runtime:import-sources": "tsx productization/tests/project-manager-import-sources-runtime-bridge.test.ts",
+    "runtime:validate-info": "tsx productization/tests/project-manager-validate-info-runtime-bridge.test.ts",
+    "runtime:confirmation-files": "tsx productization/tests/confirmation-file-bridge.test.ts",
+    "runtime:confirm-ui": "tsx productization/tests/confirm-ui-smoke-bridge.test.ts",
+    "runtime:generation-bridge": "tsx productization/tests/generation-runtime-bridge.test.ts",
+    "runtime:preview-bridge": "tsx productization/tests/preview-runtime-bridge.test.ts",
+    "runtime:export-bridge": "tsx productization/tests/export-runtime-bridge.test.ts",
+    "runtime:preview-export-richness": "tsx productization/tests/preview-export-artifact-richness.test.ts",
+    "runtime:phase-runner-preview": "tsx productization/tests/phase-runner-preview.test.ts",
+    "runtime:project-view": "tsx productization/tests/project-view-runtime-contract.test.ts",
+    "runtime:workflow-local": "tsx productization/tests/workflow-orchestrator-local-phases.test.ts",
+    "runtime:revision-export": "tsx productization/tests/revision-export-slice.test.ts",
+    "runtime:resume-continuity": "tsx productization/tests/resume-generation-revision-continuity.test.ts",
+    "runtime:shell-projection": "tsx productization/tests/project-shell-projection-gap.test.ts",
+    "runtime:checkpoint-view": "tsx productization/tests/project-view-checkpoint-slice.test.ts",
+    "runtime:workbench-ui": "tsx productization/tests/project-workbench-ui-slice.test.ts",
+    "runtime:workbench-confirmation-ui": "tsx productization/tests/project-workbench-confirmation-submission-ui.test.ts",
+    "runtime:workbench-confirmation-integration": "tsx productization/tests/project-workbench-shell-confirmation-submission-integration.test.ts",
+    "productization:mainline": "npm run runtime:generation-bridge && npm run runtime:preview-bridge && npm run runtime:export-bridge && npm run runtime:preview-export-richness && npm run runtime:phase-runner-preview && npm run runtime:project-view && npm run runtime:workflow-local && npm run runtime:revision-export && npm run runtime:resume-continuity && npm run runtime:shell-projection && npm run runtime:checkpoint-view && npm run runtime:workbench-ui && npm run runtime:workbench-confirmation-ui && npm run runtime:workbench-confirmation-integration"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

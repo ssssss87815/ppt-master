@@ -1,0 +1,368 @@
+import type { ProductActionResult } from '../adapter/interface';
+import type { ProductArtifactRef } from '../models/artifacts';
+import type { ProjectRecord, RevisionRequestRecord, WorkflowCheckpoint } from '../models/projects';
+import { runExportFromWorkspace } from '../adapter/export-runtime-bridge';
+import { runGenerationFromWorkspace } from '../adapter/generation-runtime-bridge';
+import { runSvgAuthoringProbe } from '../adapter/svg-authoring-runtime-bridge';
+import { runPreviewFromWorkspace } from '../adapter/preview-runtime-bridge';
+
+export type StartGenerationResult = ProductActionResult & {
+  checkpoints: WorkflowCheckpoint[];
+  runId: string;
+};
+
+export type RequestRevisionResult = ProductActionResult & {
+  checkpoints: WorkflowCheckpoint[];
+  revisions: RevisionRequestRecord[];
+};
+
+function hasUnverifiedStrategistBridge(artifacts: ProductArtifactRef[]): boolean {
+  return artifacts.some(
+    (artifact) =>
+      (artifact.kind === 'design_spec' || artifact.kind === 'spec_lock') &&
+      artifact.metadata?.verification === 'unverified_runtime_bridge',
+  );
+}
+
+function assertStrategistBridgeVerified(project: ProjectRecord, artifacts: ProductArtifactRef[]): void {
+  if (project.status !== 'spec_ready') {
+    return;
+  }
+
+  if (hasUnverifiedStrategistBridge(artifacts)) {
+    throw new Error(
+      'start_generation requires verified strategist outputs; design_spec/spec_lock still carry unverified_runtime_bridge metadata',
+    );
+  }
+}
+
+function toWorkflowCheckpoint(
+  project: ProjectRecord,
+  stage: WorkflowCheckpoint['stage'],
+  statusBefore: ProjectRecord['status'],
+  statusAfter: ProjectRecord['status'],
+  artifactIds: string[],
+  createdAt: string,
+  note?: string,
+): WorkflowCheckpoint {
+  return {
+    checkpointId: `${project.projectId}-${stage}-${Date.parse(createdAt)}`,
+    projectId: project.projectId,
+    stage,
+    status: 'completed',
+    statusBefore,
+    statusAfter,
+    artifactIds,
+    note,
+    createdAt,
+  };
+}
+
+function attachPhaseCheckpoint(
+  project: ProjectRecord,
+  checkpoint: WorkflowCheckpoint,
+  artifacts: ProductArtifactRef[],
+  now: string,
+): ProductActionResult {
+  return {
+    project: {
+      ...project,
+      latestCheckpointId: checkpoint.checkpointId,
+      updatedAt: now,
+      lastError: undefined,
+    },
+    artifacts,
+    nextStatus: project.status,
+  };
+}
+
+export function runStartGeneration(
+  project: ProjectRecord,
+  artifacts: ProductArtifactRef[] = [],
+  now = new Date().toISOString(),
+): StartGenerationResult {
+  if (project.status !== 'spec_ready') {
+    throw new Error(`start_generation requires spec_ready status; received ${project.status}`);
+  }
+
+  assertStrategistBridgeVerified(project, artifacts);
+
+  const runId = project.lastRunId ?? `${project.projectId}-run-${Date.parse(now)}`;
+  const generationProject: ProjectRecord = {
+    ...project,
+    status: 'generation_in_progress',
+    lastRunId: runId,
+    updatedAt: now,
+  };
+  const generated = runGenerationFromWorkspace(generationProject, now);
+  if (generated.runtimeStatus !== 'generation_synced') {
+    throw new Error(generated.note);
+  }
+  const authoringProbe = runSvgAuthoringProbe(generationProject, now);
+  if (authoringProbe.runtimeStatus !== 'mutated') {
+    throw new Error(`Generation runtime evidence passed, but SVG authoring probe failed: ${authoringProbe.note}`);
+  }
+  const refreshedGeneration = runGenerationFromWorkspace(generationProject, now);
+  if (refreshedGeneration.runtimeStatus !== 'generation_synced') {
+    throw new Error(`SVG authoring probe mutated the workspace, but refreshed generation evidence failed: ${refreshedGeneration.note}`);
+  }
+
+  const generationArtifacts = [
+    ...generated.artifacts,
+    ...authoringProbe.artifacts,
+    ...refreshedGeneration.artifacts.map((artifact) => ({
+      ...artifact,
+      artifactId: `${artifact.artifactId}-refreshed`,
+      label: `${artifact.label ?? 'Generation runtime evidence manifest'} (refreshed after authoring probe)`,
+      metadata: {
+        ...artifact.metadata,
+        verification: 'runtime_workspace_generation_bridge_refreshed_after_authoring',
+        refreshedAfterAuthoringProbe: true,
+      },
+    })),
+  ];
+
+  const startCheckpoint = toWorkflowCheckpoint(
+    generationProject,
+    'generation_started',
+    project.status,
+    'generation_in_progress',
+    generationArtifacts.map((artifact) => artifact.artifactId),
+    now,
+    'Generation phase entered via runtime workspace evidence plus live SVG authoring mutation probe.',
+  );
+  const attached = attachPhaseCheckpoint(generationProject, startCheckpoint, generationArtifacts, now);
+
+  return {
+    project: attached.project,
+    artifacts: attached.artifacts,
+    nextStatus: generationProject.status,
+    checkpoints: [startCheckpoint],
+    runId,
+  };
+}
+
+export function runResumeGeneration(
+  project: ProjectRecord,
+  now = new Date().toISOString(),
+): StartGenerationResult {
+  if (project.status !== 'revision_requested' || !project.latestRevisionRequestId) {
+    throw new Error(
+      `resume_generation requires revision_requested status with a revision record; received ${project.status} and ${project.latestRevisionRequestId}.`,
+    );
+  }
+
+  const runId = project.lastRunId ?? `${project.projectId}-run-${Date.parse(now)}`;
+  const resumedProject: ProjectRecord = {
+    ...project,
+    status: 'generation_in_progress',
+    lastRunId: runId,
+    updatedAt: now,
+  };
+  const generated = runGenerationFromWorkspace(resumedProject, now);
+  if (generated.runtimeStatus !== 'generation_synced') {
+    throw new Error(generated.note);
+  }
+  const authoringProbe = runSvgAuthoringProbe(resumedProject, now);
+  if (authoringProbe.runtimeStatus !== 'mutated') {
+    throw new Error(`Generation resume evidence passed, but SVG authoring probe failed: ${authoringProbe.note}`);
+  }
+  const refreshedGeneration = runGenerationFromWorkspace(resumedProject, now);
+  if (refreshedGeneration.runtimeStatus !== 'generation_synced') {
+    throw new Error(`SVG authoring probe mutated the workspace during resume, but refreshed generation evidence failed: ${refreshedGeneration.note}`);
+  }
+
+  const generationArtifacts = [
+    ...generated.artifacts,
+    ...authoringProbe.artifacts,
+    ...refreshedGeneration.artifacts.map((artifact) => ({
+      ...artifact,
+      artifactId: `${artifact.artifactId}-refreshed`,
+      label: `${artifact.label ?? 'Generation runtime evidence manifest'} (refreshed after authoring probe)`,
+      metadata: {
+        ...artifact.metadata,
+        verification: 'runtime_workspace_generation_bridge_refreshed_after_authoring',
+        refreshedAfterAuthoringProbe: true,
+      },
+    })),
+  ];
+
+  const resumeCheckpoint = toWorkflowCheckpoint(
+    resumedProject,
+    'generation_resumed',
+    project.status,
+    'generation_in_progress',
+    [...generationArtifacts.map((artifact) => artifact.artifactId), ...(project.latestRevisionRequestId ? [project.latestRevisionRequestId] : [])],
+    now,
+    'Generation resumed after revision request via runtime workspace evidence plus live SVG authoring mutation probe.',
+  );
+  const attached = attachPhaseCheckpoint(resumedProject, resumeCheckpoint, generationArtifacts, now);
+
+  return {
+    project: attached.project,
+    artifacts: attached.artifacts,
+    nextStatus: resumedProject.status,
+    checkpoints: [resumeCheckpoint],
+    runId,
+  };
+}
+
+export function syncPreviewArtifacts(
+  project: ProjectRecord,
+  now = new Date().toISOString(),
+): ProductActionResult & {
+  checkpoints: WorkflowCheckpoint[];
+  artifacts: ProductArtifactRef[];
+} {
+  if (project.status !== 'generation_in_progress') {
+    throw new Error(`preview sync requires generation_in_progress status; received ${project.status}`);
+  }
+
+  const runId = project.lastRunId ?? `${project.projectId}-run-${Date.parse(now)}`;
+  const generationProject: ProjectRecord = {
+    ...project,
+    lastRunId: runId,
+    updatedAt: now,
+  };
+
+  const normalizedGeneration = runGenerationFromWorkspace(generationProject, now);
+  if (normalizedGeneration.runtimeStatus !== 'generation_synced') {
+    throw new Error(`preview sync normalization failed: ${normalizedGeneration.note}`);
+  }
+
+  const previewed = runPreviewFromWorkspace(generationProject, now);
+  if (previewed.runtimeStatus !== 'preview_synced') {
+    throw new Error(previewed.note);
+  }
+
+  const nextProject: ProjectRecord = {
+    ...generationProject,
+    status: 'preview_available',
+    updatedAt: now,
+  };
+  const previewCheckpoint = toWorkflowCheckpoint(
+    nextProject,
+    'preview_synced',
+    project.status,
+    nextProject.status,
+    previewed.artifacts.map((item) => item.artifactId),
+    now,
+    'Preview artifacts synced via runtime workspace preview bridge into product-facing workbench.',
+  );
+  const attached = attachPhaseCheckpoint(nextProject, previewCheckpoint, [...normalizedGeneration.artifacts, ...previewed.artifacts], now);
+
+  return {
+    project: attached.project,
+    artifacts: attached.artifacts,
+    nextStatus: nextProject.status,
+    checkpoints: [previewCheckpoint],
+  };
+}
+
+export function requestRevision(
+  project: ProjectRecord,
+  note: string,
+  now = new Date().toISOString(),
+): RequestRevisionResult {
+  if (project.status !== 'preview_available') {
+    throw new Error(`request_revision requires preview_available status; received ${project.status}`);
+  }
+
+  const revisionId = `${project.projectId}-revision-${Date.parse(now)}`;
+  const revision: RevisionRequestRecord = {
+    revisionId,
+    projectId: project.projectId,
+    note,
+    status: 'requested',
+    requestedAt: now,
+    sourceStatus: 'preview_available',
+    targetStatus: 'revision_requested',
+  };
+  const nextProject: ProjectRecord = {
+    ...project,
+    status: 'revision_requested',
+    latestRevisionRequestId: revisionId,
+    updatedAt: now,
+  };
+  const revisionArtifact: ProductArtifactRef = {
+    artifactId: revisionId,
+    projectId: project.projectId,
+    kind: 'runtime_log',
+    scope: 'run',
+    status: 'ready',
+    label: 'revision request',
+    runId: project.lastRunId,
+    storageKey: `${project.workspace.workspacePath}/runs/${project.lastRunId ?? 'pending'}/revision-request.txt`,
+    mimeType: 'text/plain',
+    metadata: {
+      note,
+      requestedAt: now,
+    },
+    createdAt: now,
+    updatedAt: now,
+  };
+  const revisionCheckpoint = toWorkflowCheckpoint(
+    nextProject,
+    'revision_requested',
+    project.status,
+    nextProject.status,
+    [revisionArtifact.artifactId],
+    now,
+    'Revision requested from preview stage.',
+  );
+  revision.checkpointId = revisionCheckpoint.checkpointId;
+  const attached = attachPhaseCheckpoint(nextProject, revisionCheckpoint, [revisionArtifact], now);
+
+  return {
+    project: attached.project,
+    artifacts: attached.artifacts,
+    nextStatus: nextProject.status,
+    checkpoints: [revisionCheckpoint],
+    revisions: [revision],
+  };
+}
+
+export function exportLocalPhase(
+  project: ProjectRecord,
+  now = new Date().toISOString(),
+): ProductActionResult & {
+  checkpoints: WorkflowCheckpoint[];
+  artifacts: ProductArtifactRef[];
+} {
+  if (project.status !== 'preview_available') {
+    throw new Error(`export phase requires preview_available status; received ${project.status}`);
+  }
+
+  const normalizedGeneration = runGenerationFromWorkspace(project, now);
+  if (normalizedGeneration.runtimeStatus !== 'generation_synced') {
+    throw new Error(`export normalization failed: ${normalizedGeneration.note}`);
+  }
+
+  const exported = runExportFromWorkspace(project, now);
+  if (exported.runtimeStatus !== 'exported') {
+    throw new Error(exported.note);
+  }
+
+  const nextProject: ProjectRecord = {
+    ...project,
+    status: 'export_ready',
+    updatedAt: now,
+  };
+  const exportCheckpoint = toWorkflowCheckpoint(
+    nextProject,
+    'export_ready',
+    project.status,
+    nextProject.status,
+    exported.artifacts.map((artifact) => artifact.artifactId),
+    now,
+    'Export artifacts prepared by the runtime export bridge.',
+  );
+  const attached = attachPhaseCheckpoint(nextProject, exportCheckpoint, [...normalizedGeneration.artifacts, ...exported.artifacts], now);
+
+  return {
+    project: attached.project,
+    artifacts: attached.artifacts,
+    nextStatus: nextProject.status,
+    checkpoints: [exportCheckpoint],
+  };
+}
