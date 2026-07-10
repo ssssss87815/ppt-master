@@ -119,6 +119,94 @@ async function main() {
   assert.equal(unsupportedAction.status, 400, 'unsupported POST actions should be rejected honestly');
   assert.match(unsupportedAction.body, /Unsupported action: export_pptx/);
 
+  let rejectedTransitionUpdates = 0;
+  let rejectedTransitionArtifactWrites = 0;
+  let rejectedTransitionCheckpointWrites = 0;
+  const rejectedTransition = await handleProjectWorkbenchHttpRequest(
+    {
+      projects: {
+        async getById(projectId: string): Promise<ProjectRecord | null> {
+          return projectId === project.projectId ? project : null;
+        },
+        async update(updatedProject: ProjectRecord): Promise<ProjectRecord> {
+          rejectedTransitionUpdates += 1;
+          return updatedProject;
+        },
+      },
+      artifacts: {
+        async listByProjectId(): Promise<ProductArtifactRef[]> {
+          return [];
+        },
+        async createMany(newArtifacts: ProductArtifactRef[]): Promise<ProductArtifactRef[]> {
+          rejectedTransitionArtifactWrites += 1;
+          return newArtifacts;
+        },
+      },
+      checkpoints: {
+        async getLatestByProjectId(): Promise<WorkflowCheckpoint | null> {
+          return null;
+        },
+        async listByProjectId(): Promise<WorkflowCheckpoint[]> {
+          return [];
+        },
+        async create(checkpoint: WorkflowCheckpoint): Promise<WorkflowCheckpoint> {
+          rejectedTransitionCheckpointWrites += 1;
+          return checkpoint;
+        },
+      },
+    },
+    {
+      method: 'POST',
+      url: '/projects/pitch%20deck%20%2F%202026',
+      body: JSON.stringify({ action: 'start_generation' }),
+    },
+  );
+  assert.equal(rejectedTransition.status, 400, 'start_generation should reject projects that are not spec_ready');
+  assert.match(rejectedTransition.body, /Invalid transition: start_generation requires spec_ready status; received draft/);
+  assert.equal(rejectedTransitionUpdates, 0, 'rejected start_generation must not update the project');
+  assert.equal(rejectedTransitionArtifactWrites, 0, 'rejected start_generation must not create artifacts');
+  assert.equal(rejectedTransitionCheckpointWrites, 0, 'rejected start_generation must not create checkpoints');
+
+  const unverifiedProject: ProjectRecord = { ...project, status: 'spec_ready' };
+  const unverifiedStrategistArtifacts: ProductArtifactRef[] = [
+    {
+      artifactId: 'pitch-deck-unverified-design-spec',
+      projectId: unverifiedProject.projectId,
+      kind: 'design_spec',
+      scope: 'project',
+      status: 'ready',
+      label: 'Unverified design spec',
+      storageKey: 'projects/pitch-deck-route-proof/design_spec.md',
+      mimeType: 'text/markdown',
+      metadata: { verification: 'unverified_runtime_bridge' },
+      createdAt: '2026-07-10T10:20:00.000Z',
+      updatedAt: '2026-07-10T10:20:00.000Z',
+    },
+    {
+      artifactId: 'pitch-deck-unverified-spec-lock',
+      projectId: unverifiedProject.projectId,
+      kind: 'spec_lock',
+      scope: 'project',
+      status: 'ready',
+      label: 'Unverified spec lock',
+      storageKey: 'projects/pitch-deck-route-proof/spec_lock.md',
+      mimeType: 'text/markdown',
+      metadata: { verification: 'unverified_runtime_bridge' },
+      createdAt: '2026-07-10T10:20:00.000Z',
+      updatedAt: '2026-07-10T10:20:00.000Z',
+    },
+  ];
+  const unverifiedStart = await handleProjectWorkbenchHttpRequest(
+    dependencies(unverifiedProject, unverifiedStrategistArtifacts),
+    {
+      method: 'POST',
+      url: '/projects/pitch%20deck%20%2F%202026',
+      body: JSON.stringify({ action: 'start_generation' }),
+    },
+  );
+  assert.equal(unverifiedStart.status, 400, 'start_generation should reject unverified strategist handoffs');
+  assert.match(unverifiedStart.body, /Invalid transition: start_generation requires verified strategist outputs/i);
+
   const root = mkdtempSync(path.join(os.tmpdir(), 'ppt-workbench-route-generation-'));
   const generationWorkspace = path.join(root, 'runtime-workspace');
   try {
