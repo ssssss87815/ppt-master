@@ -25,7 +25,7 @@ export type ProjectShellPreviewSectionViewModel = {
   manifestStorageKey?: string;
   pageCount?: number;
   pageArtifactIds?: string[];
-  items?: Array<PreviewViewModel['items'][number]>;
+  items?: Array<NonNullable<PreviewViewModel['items']>[number]>;
 };
 
 export type ProjectShellExportSectionViewModel = {

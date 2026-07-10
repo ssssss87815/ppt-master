@@ -1,10 +1,11 @@
-import type { ProductArtifactRef } from '../backend/models/artifacts';
-import type { WorkflowCheckpoint, ProjectRecord } from '../backend/models/projects';
-import type { ProjectRepository, CheckpointRepository } from '../backend/state/project-repository';
-import type { ArtifactRepository } from '../backend/state/artifact-repository';
-import { toProjectViewModel } from '../backend/services/project-view-service';
-import type { ProjectViewModel } from './viewmodels/project-view-model';
-import { renderProjectWorkbenchShell } from './render-project-workbench-shell';
+import type { ProductArtifactRef } from '../backend/models/artifacts.js';
+import type { ConfirmationKey, ConfirmationRecommendation } from '../backend/models/confirmations.js';
+import type { WorkflowCheckpoint, ProjectRecord } from '../backend/models/projects.js';
+import type { ProjectRepository, CheckpointRepository } from '../backend/state/project-repository.js';
+import type { ArtifactRepository } from '../backend/state/artifact-repository.js';
+import { toProjectViewModel } from '../backend/services/project-view-service.js';
+import type { ProjectViewModel } from './viewmodels/project-view-model.js';
+import { renderProjectWorkbenchShell } from './render-project-workbench-shell.js';
 
 export type ProjectWorkbenchPageDependencies = {
   projects: Pick<ProjectRepository, 'getById'> & Partial<Pick<ProjectRepository, 'update'>>;
@@ -145,10 +146,15 @@ export async function renderProjectWorkbenchPage(
   }
 
   const latestStartedCheckpoint = resolveLatestStartedCheckpoint(checkpoints);
+  const typedRecommendations = recommendations.filter(
+    (recommendation): recommendation is ConfirmationRecommendation =>
+      (['audience', 'goal', 'tone', 'language', 'brand', 'outline', 'visual_style', 'delivery'] as ConfirmationKey[])
+        .includes(recommendation.key as ConfirmationKey),
+  );
   const viewModel = toProjectViewModel(
     project,
     artifacts,
-    recommendations,
+    typedRecommendations,
     latestCheckpoint ?? undefined,
     latestStartedCheckpoint,
   ) as unknown as ProjectViewModel;

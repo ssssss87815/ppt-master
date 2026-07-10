@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 
 import type { ProductArtifactRef } from '../backend/models/artifacts';
+import type { ConfirmationRecommendation } from '../backend/models/confirmations';
 import type { ProjectRecord, WorkflowCheckpoint } from '../backend/models/projects';
 import { toProjectViewModel } from '../backend/services/project-view-service';
 
@@ -8,7 +9,7 @@ function makeLockedProject(): ProjectRecord {
   return {
     projectId: 'pptmaster-demo-project',
     name: 'PPTMASTER Demo Project',
-    status: 'confirmations_locked',
+    status: 'confirmation_locked',
     workspace: {
       projectId: 'pptmaster-demo-project',
       workspacePath: 'projects/pptmaster-demo-project',
@@ -25,8 +26,8 @@ function makeLockedCheckpoint(project: ProjectRecord): WorkflowCheckpoint {
     projectId: project.projectId,
     stage: 'confirmations_locked',
     status: 'completed',
-    statusBefore: 'confirmations_generated',
-    statusAfter: 'confirmations_locked',
+    statusBefore: 'confirmation_pending',
+    statusAfter: 'confirmation_locked',
     artifactIds: ['pptmaster-demo-project-confirmation-result'],
     note: 'Eight Confirmations have been locked.',
     createdAt: '2026-06-30T16:15:00.000Z',
@@ -77,7 +78,7 @@ function makeConfirmationArtifacts(project: ProjectRecord): ProductArtifactRef[]
 function main() {
   const project = makeLockedProject();
   const checkpoint = makeLockedCheckpoint(project);
-  const recommendations = [
+  const recommendations: ConfirmationRecommendation[] = [
     { key: 'audience', title: 'Audience', recommendation: 'Founders and investors' },
     { key: 'goal', title: 'Goal', recommendation: 'Support seed fundraising' },
     { key: 'tone', title: 'Tone', recommendation: 'Confident and concise' },
@@ -89,7 +90,7 @@ function main() {
   ];
   const viewModel = toProjectViewModel(project, makeConfirmationArtifacts(project), recommendations, checkpoint);
 
-  assert.equal(viewModel.status, 'confirmations_locked', 'view model should preserve confirmations_locked status');
+  assert.equal(viewModel.status, 'confirmation_locked', 'view model should preserve confirmation_locked status');
   assert.equal(viewModel.timeline[0]?.key, 'sources', 'timeline should remain anchored at source intake');
   assert.equal(viewModel.timeline[1]?.key, 'confirmations', 'timeline should project the confirmation step');
   assert.equal(viewModel.timeline[1]?.status, 'confirmation_pending', 'confirmation step should retain its canonical lifecycle status after lock');

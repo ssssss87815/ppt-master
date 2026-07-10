@@ -1,4 +1,9 @@
-import type { ProjectViewModel } from './viewmodels/project-view-model';
+import type { ProjectViewModel } from './viewmodels/project-view-model.js';
+
+type ConfirmationSubmissionQuestion = NonNullable<
+  ProjectViewModel['workbench']['confirmationSubmission']
+>['questions'][number];
+type PreviewItem = NonNullable<NonNullable<ProjectViewModel['preview']>['items']>[number];
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '')
@@ -62,6 +67,20 @@ function formatActionOwner(action: string): string {
 
 function isActionableAction(action: string): boolean {
   return action === 'submit_confirmations';
+}
+
+function actionAvailabilityMessage(project: ProjectViewModel, action: string): string {
+  if (action !== 'start_generation') {
+    return 'Runtime action unavailable in this read-only workbench.';
+  }
+
+  const strategistHandoff = project.workbench.strategistHandoff;
+  if (strategistHandoff?.gateStatus === 'verified') {
+    return 'Generation handoff is runtime-verified, but this workbench does not execute generation directly.';
+  }
+
+  return strategistHandoff?.generationGateCopy
+    ?? 'Generation handoff locked: wait for runtime bridge verification before starting page generation.';
 }
 
 function projectedNextActions(project: ProjectViewModel): string[] {
@@ -146,7 +165,7 @@ function actionableRows(project: ProjectViewModel): string {
           </dl>
           ${isActionableAction(action)
             ? `<button type="button" class="next-action-button" data-action-code="${escapeHtml(action)}" data-project-id="${escapeHtml(project.projectId)}">${escapeHtml(formatActionLabel(action))}</button>`
-            : `<p class="action-availability">Runtime action unavailable in this read-only workbench.</p>`}
+            : `<p class="action-availability">${escapeHtml(actionAvailabilityMessage(project, action))}</p>`}
         </article>`;
     })
     .join('');
@@ -486,7 +505,7 @@ function renderPanelDirectory(project: ProjectViewModel): string {
   const artifactSummary = project.artifactSummary;
   const totalArtifacts = artifactSummary?.planned ?? project.artifacts.length;
   const readyArtifacts = artifactSummary?.ready ?? project.artifacts.filter((artifact) => artifact.status === 'ready').length;
-  const previewPageItems = project.preview?.items?.filter((item) => item.role === 'page') ?? [];
+  const previewPageItems = project.preview?.items?.filter((item: PreviewItem) => item.role === 'page') ?? [];
   const confirmationSubmission = project.workbench.confirmationSubmission;
   const nextActions = projectedNextActions(project);
   const nextActionDirectoryStatus = nextActions.length
@@ -719,12 +738,27 @@ function renderConfirmationSubmission(project: ProjectViewModel): string {
 
   const submitAction = submission.submitAction;
 
-  const answeredQuestions = submission.questions.filter((question) => question.answer).length;
-  const pendingQuestions = Math.max(submission.questions.length - answeredQuestions, 0);
+  const normalizedQuestionStates = submission.questions.map((question: ConfirmationSubmissionQuestion) => {
+    const normalizedAnswer = typeof question.answer === 'string' ? question.answer.trim() : '';
+    return {
+      ...question,
+      answer: normalizedAnswer,
+      isAnswered: normalizedAnswer.length > 0,
+    };
+  });
+  const answeredQuestions = normalizedQuestionStates.filter((question: ConfirmationSubmissionQuestion & { isAnswered: boolean }) => question.isAnswered).length;
+  const pendingQuestions = Math.max(normalizedQuestionStates.length - answeredQuestions, 0);
+  const isComplete = pendingQuestions === 0 && normalizedQuestionStates.length > 0;
+  const completionLabel = `${answeredQuestions}/${normalizedQuestionStates.length} answered`;
+  const readinessMessage = isComplete
+    ? 'All confirmation answers are complete. Submission is ready.'
+    : pendingQuestions === 1
+      ? '1 confirmation answer is still required before submission.'
+      : `${pendingQuestions} confirmation answers are still required before submission.`;
   const answeredList = submission.questions
-    .filter((question) => question.answer)
+    .filter((question: ConfirmationSubmissionQuestion) => question.answer)
     .map(
-      (question) => `
+      (question: ConfirmationSubmissionQuestion) => `
         <li data-key="${escapeHtml(question.key)}">
           <strong>${escapeHtml(question.title)}</strong>
           <span class="question-state">answered</span>
@@ -733,12 +767,12 @@ function renderConfirmationSubmission(project: ProjectViewModel): string {
     )
     .join('');
 
-  const rows = submission.questions
+  const rows = normalizedQuestionStates
     .map(
-      (question, index) => `
-        <li data-key="${escapeHtml(question.key)}" data-state="${escapeHtml(question.answer ? 'answered' : 'pending')}">
+      (question: ConfirmationSubmissionQuestion & { isAnswered: boolean }, index: number) => `
+        <li data-key="${escapeHtml(question.key)}" data-state="${escapeHtml(question.isAnswered ? 'answered' : 'pending')}">
           <label for="confirmation-input-${escapeHtml(question.key)}"><strong>${escapeHtml(question.title)}</strong></label>
-          <span class="question-state">${question.answer ? 'answered' : 'pending'}</span>
+          <span class="question-state" data-question-state>${question.isAnswered ? 'answered' : 'pending'}</span>
           ${question.recommendation ? `<p class="recommendation">${escapeHtml(question.recommendation)}</p>` : ''}
           ${question.answer ? `<p class="answer">Answer: ${escapeHtml(question.answer)}</p>` : ''}
           ${question.input?.placeholder
@@ -752,18 +786,19 @@ function renderConfirmationSubmission(project: ProjectViewModel): string {
     <section id="panel-confirmations" class="confirmation-submission tone-${escapeHtml(submission.bannerTone)}" data-panel="confirmations" data-status="${escapeHtml(submission.status)}" tabindex="-1" aria-labelledby="${panelHeadingId('confirmations')}">
       <header>
         <h2 id="${panelHeadingId('confirmations')}">Confirmation submission</h2>
-        <span class="panel-status completion-label">${escapeHtml(`${submission.completion.completedCount}/${submission.completion.totalCount} answered`)}</span>
+        <span class="panel-status completion-label" data-completion-label>${escapeHtml(completionLabel)}</span>
       </header>
       <p class="banner-text">${escapeHtml(submission.bannerText)}</p>
       <div class="confirmation-progress" data-answered-count="${escapeHtml(answeredQuestions)}" data-pending-count="${escapeHtml(pendingQuestions)}">
-        <p class="section-summary">${escapeHtml(answeredQuestions ? `${answeredQuestions} answers captured; ${pendingQuestions} still need review.` : 'No answers captured yet. Fill the confirmation prompts below to lock the deck brief.')}</p>
+        <p class="section-summary" data-confirmation-summary>${escapeHtml(answeredQuestions ? `${answeredQuestions} answers captured; ${pendingQuestions} still need review.` : 'No answers captured yet. Fill the confirmation prompts below to lock the deck brief.')}</p>
         <div class="section-badges">
-          ${renderBadge(answeredQuestions ? 'success' : 'neutral', `${answeredQuestions} answered`)}
-          ${renderBadge(pendingQuestions ? 'warning' : 'success', `${pendingQuestions} pending`)}
+          <span class="badge ${answeredQuestions ? 'badge-success' : 'badge-neutral'}" data-answered-badge>${escapeHtml(`${answeredQuestions} answered`)}</span>
+          <span class="badge ${pendingQuestions ? 'badge-warning' : 'badge-success'}" data-pending-badge>${escapeHtml(`${pendingQuestions} pending`)}</span>
         </div>
+        <p class="confirmation-readiness" data-readiness-state="${escapeHtml(isComplete ? 'ready' : 'pending')}" aria-live="polite">${escapeHtml(readinessMessage)}</p>
       </div>
       <dl class="artifact-metadata">
-        ${renderMetadataRow('Completion status', submission.completion.isComplete ? 'complete' : 'pending')}
+        ${renderMetadataRow('Completion status', isComplete ? 'complete' : 'pending')}
         ${renderMetadataRow('Question count', submission.questions.length)}
       </dl>
       ${submitAction
@@ -779,10 +814,11 @@ function renderConfirmationSubmission(project: ProjectViewModel): string {
         <input type="hidden" name="payload-format" value="confirmation-answers-json">
         <ol class="confirmation-questions">${rows}</ol>
         <div class="confirmation-form-footer">
-          <button type="submit" class="confirmation-submit-button" data-submit-action="${escapeHtml(submitAction?.type ?? '')}" data-project-id="${escapeHtml(submitAction?.projectId ?? submission.projectId)}"${submitAction ? '' : ' disabled'}>${escapeHtml(submission.completion.isComplete ? 'Update locked confirmations' : 'Submit confirmation answers')}</button>
+          <button type="submit" class="confirmation-submit-button" data-submit-action="${escapeHtml(submitAction?.type ?? '')}" data-project-id="${escapeHtml(submitAction?.projectId ?? submission.projectId)}"${submitAction && isComplete ? '' : ' disabled'}>${escapeHtml(isComplete ? 'Update locked confirmations' : 'Submit confirmation answers')}</button>
         </div>
+        <p class="confirmation-submit-error" role="alert" hidden></p>
       </form>
-      <script>(function(){const form=document.querySelector('#panel-confirmations .confirmation-form');if(!form)return;form.addEventListener('submit',async function(event){event.preventDefault();const answers={};form.querySelectorAll('textarea[data-confirmation-key]').forEach(function(input){answers[input.dataset.confirmationKey]=input.value;});const response=await fetch(form.action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({answers:answers})});document.open();document.write(await response.text());document.close();});})();</script>
+      <script>(function(){const form=document.querySelector('#panel-confirmations .confirmation-form');if(!form)return;const button=form.querySelector('.confirmation-submit-button');const error=form.querySelector('.confirmation-submit-error');const completionLabel=form.closest('#panel-confirmations')?.querySelector('[data-completion-label]');const progress=form.closest('#panel-confirmations')?.querySelector('.confirmation-progress');const summary=form.closest('#panel-confirmations')?.querySelector('[data-confirmation-summary]');const answeredBadge=form.closest('#panel-confirmations')?.querySelector('[data-answered-badge]');const pendingBadge=form.closest('#panel-confirmations')?.querySelector('[data-pending-badge]');const readiness=form.closest('#panel-confirmations')?.querySelector('.confirmation-readiness');const inputs=Array.from(form.querySelectorAll('textarea[data-confirmation-key]'));function updateQuestionState(input){const item=input.closest('li[data-key]');if(!item)return;const stateLabel=item.querySelector('[data-question-state]');const value=input.value.trim();const answered=value.length>0;item.dataset.state=answered?'answered':'pending';if(stateLabel){stateLabel.textContent=answered?'answered':'pending';}}function syncCompletion(){let answeredCount=0;inputs.forEach(function(input){updateQuestionState(input);if(input.value.trim().length>0){answeredCount+=1;}});const totalCount=inputs.length;const pendingCount=Math.max(totalCount-answeredCount,0);const isComplete=totalCount>0&&pendingCount===0;if(progress){progress.dataset.answeredCount=String(answeredCount);progress.dataset.pendingCount=String(pendingCount);}if(completionLabel){completionLabel.textContent=answeredCount+'/'+totalCount+' answered';}if(summary){summary.textContent=answeredCount?answeredCount+' answers captured; '+pendingCount+' still need review.':'No answers captured yet. Fill the confirmation prompts below to lock the deck brief.';}if(answeredBadge){answeredBadge.textContent=answeredCount+' answered';answeredBadge.className='badge '+(answeredCount?'badge-success':'badge-neutral');}if(pendingBadge){pendingBadge.textContent=pendingCount+' pending';pendingBadge.className='badge '+(pendingCount?'badge-warning':'badge-success');}if(readiness){readiness.dataset.readinessState=isComplete?'ready':'pending';readiness.textContent=isComplete?'All confirmation answers are complete. Submission is ready.':pendingCount===1?'1 confirmation answer is still required before submission.':pendingCount+' confirmation answers are still required before submission.';}if(button){button.disabled=!isComplete;}}inputs.forEach(function(input){input.value=input.value.trim();input.addEventListener('input',syncCompletion);});syncCompletion();form.addEventListener('submit',async function(event){event.preventDefault();if(!button||button.disabled)return;const answers={};form.querySelectorAll('textarea[data-confirmation-key]').forEach(function(input){answers[input.dataset.confirmationKey]=input.value.trim();});button.disabled=true;if(error){error.hidden=true;error.textContent='';}try{const response=await fetch(form.action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({answers:answers})});const body=await response.text();if(!response.ok){throw new Error(body||response.statusText||'The confirmation submission was not accepted.');}document.open();document.write(body);document.close();}catch(submitError){if(error){error.textContent='Could not submit confirmation answers: '+(submitError instanceof Error?submitError.message:String(submitError));error.hidden=false;}syncCompletion();}});})();</script>
     </section>`;
 }
 
@@ -803,7 +839,7 @@ function renderArtifactSummaryPanel(project: ProjectViewModel): string {
     return '';
   }
 
-  const byKind = artifactSummary?.byKind ?? project.artifacts.reduce<Record<string, number>>((acc, artifact) => {
+  const byKind: Record<string, number> = artifactSummary?.byKind ?? project.artifacts.reduce<Record<string, number>>((acc, artifact) => {
     acc[artifact.kind] = (acc[artifact.kind] ?? 0) + 1;
     return acc;
   }, {});
@@ -871,7 +907,7 @@ function renderPreviewPanel(project: ProjectViewModel): string {
     return '';
   }
 
-  const pageItems = previewItems.filter((item) => item.role === 'page');
+  const pageItems = previewItems.filter((item: PreviewItem) => item.role === 'page');
   const rows = [
     renderMetadataRow('Manifest', preview?.manifestStorageKey),
     renderMetadataRow('Latest preview URL', preview?.latestPreviewUrl ?? project.latestPreviewUrl),
@@ -881,7 +917,7 @@ function renderPreviewPanel(project: ProjectViewModel): string {
   const itemList = previewItems.length
     ? `<ul class="artifact-list preview-items">${previewItems
         .map(
-          (item) => `<li data-kind="${escapeHtml(item.kind)}" data-role="${escapeHtml(item.role)}">${escapeHtml(item.title ?? item.label ?? item.storageKey)}${item.pageKey ? ` <span class="artifact-page-key">(${escapeHtml(item.pageKey)})</span>` : ''}${item.filename ? ` <span class="artifact-filename">${escapeHtml(item.filename)}</span>` : ''}${item.mimeType ? ` <span class="artifact-mime">${escapeHtml(item.mimeType)}</span>` : ''}</li>`,
+          (item: PreviewItem) => `<li data-kind="${escapeHtml(item.kind)}" data-role="${escapeHtml(item.role)}">${escapeHtml(item.title ?? item.label ?? item.storageKey)}${item.pageKey ? ` <span class="artifact-page-key">(${escapeHtml(item.pageKey)})</span>` : ''}${item.filename ? ` <span class="artifact-filename">${escapeHtml(item.filename)}</span>` : ''}${item.mimeType ? ` <span class="artifact-mime">${escapeHtml(item.mimeType)}</span>` : ''}</li>`,
         )
         .join('')}</ul>`
     : '';
@@ -921,7 +957,7 @@ function renderExportPanel(project: ProjectViewModel): string {
 
   const companionList = exportView.companionStorageKeys?.length
     ? `<ul class="artifact-list export-companions">${exportView.companionStorageKeys
-        .map((storageKey) => `<li data-storage-key="${escapeHtml(storageKey)}">${escapeHtml(storageKey)}</li>`)
+        .map((storageKey: string) => `<li data-storage-key="${escapeHtml(storageKey)}">${escapeHtml(storageKey)}</li>`)
         .join('')}</ul>`
     : '';
   const exportAction = exportView.latestExportUrl
@@ -1315,6 +1351,10 @@ export function renderProjectWorkbenchShell(project: ProjectViewModel): string {
       .confirmation-submit-button[disabled] {
         opacity: 0.45;
         cursor: not-allowed;
+      }
+      .confirmation-submit-error {
+        margin: 0.75rem 0 0;
+        color: #fecaca;
       }
       @media (max-width: 820px) {
         main { padding: 1rem 0.9rem 2rem; }

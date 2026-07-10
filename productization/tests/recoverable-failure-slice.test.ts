@@ -67,7 +67,7 @@ async function main() {
   assert(failedView.artifactSummary?.failed === 0, 'failed view should expose zero failed artifacts when none are supplied');
   assert(failedView.timeline[0]?.key === 'sources', 'failed view should keep timeline anchored at source intake first');
   assert(
-    failedView.nextActions.every((action) => action !== 'Resume generation'),
+    !failedView.nextActions.includes('resume_generation'),
     'failed_recoverable view should not advertise resume generation before a revision-backed recovery bridge exists',
   );
   assert(failedView.timeline.every((item) => item.status !== 'failed_recoverable'), 'failed_recoverable should remain an out-of-band status, not a normal timeline step');

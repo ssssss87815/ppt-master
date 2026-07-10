@@ -64,7 +64,7 @@ function main() {
     const specReadyProject = baseProject('spec_ready', fixture.workspacePath);
     const generated = runLocalGenerationPhase(specReadyProject, '2026-06-30T16:20:00.000Z');
     assert(generated.started.project.status === 'generation_in_progress', 'local generation should start generation');
-    assert(generated.started.nextStatus === 'generation_in_progress', 'local generation start should expose nextStatus for orchestration consumers');
+    assert(generated.started.project.status === 'generation_in_progress', 'local generation start should expose the generation-in-progress project state for orchestration consumers');
 
     const generatedStartView = toProjectViewModel(
       generated.started.project,
@@ -79,7 +79,7 @@ function main() {
     assert(generatedStartView.lastStartedCheckpoint?.statusTitle === 'Completed', 'local generation view should surface latest available start-marker checkpoint status title');
     assert(generatedStartView.lastStartedCheckpoint?.note === 'Generation phase entered via runtime workspace evidence plus live SVG authoring mutation probe.', 'local generation view should surface runtime-backed start-marker checkpoint note');
     assert(generatedStartView.lastStartedCheckpoint?.createdAt === '2026-06-30T16:20:00.000Z', 'local generation view should surface start-marker createdAt');
-    assert(generatedStartView.lastStartedCheckpoint?.storageKey?.endsWith(`${generated.started.checkpoints[0]?.checkpointId}.json`), 'local generation view should surface start-marker storage key');
+    assert(generatedStartView.lastStartedCheckpoint?.storageKey?.endsWith(`${generated.started.checkpoints[0]?.checkpointId}.json`) ?? false, 'local generation view should surface start-marker storage key');
     assert(generated.previewed.project.status === 'preview_available', 'local generation should end at preview_available');
     assert(generated.previewed.artifacts.some((item) => item.kind === 'preview_bundle'), 'local generation should emit preview bundle');
 

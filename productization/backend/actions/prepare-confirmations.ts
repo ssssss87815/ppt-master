@@ -1,14 +1,9 @@
 import type { PrepareConfirmationsAction } from '../models/actions';
+import type { ConfirmationRecommendation } from '../models/confirmations';
 import type { ProductArtifactRef } from '../models/artifacts';
 import type { ProjectRecord, WorkflowCheckpoint } from '../models/projects';
 import { attachCheckpoint } from '../adapter/pptmaster-adapter';
 import { assertProjectStatus } from '../state/status-guards';
-
-export type ConfirmationRecommendation = {
-  key: string;
-  title: string;
-  recommendation: string;
-};
 
 export function applyBaseRecommendations(action: PrepareConfirmationsAction['payload']): ConfirmationRecommendation[] {
   return [

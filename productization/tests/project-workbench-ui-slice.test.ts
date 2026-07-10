@@ -95,7 +95,7 @@ function main() {
     assert.equal(postLockView.status, 'spec_ready', 'post-lock view should advance to spec_ready only after the strategist runtime bridge materializes a ready design spec and locked spec lock');
     assert.equal(postLockView.workbench.confirmationSubmission?.status, 'submitted', 'confirmation submission should show submitted after lock');
     assert.match(postLockView.workbench.confirmationSubmission?.bannerText ?? '', /locked and ready/i, 'submitted banner should describe strategist handoff readiness');
-    assert.ok((postLockView.artifactSummary.byKind.design_spec ?? 0) >= 1, 'artifact summary should count materialized strategist design_spec artifacts');
+    assert.ok((postLockView.artifactSummary?.byKind.design_spec ?? 0) >= 1, 'artifact summary should count materialized strategist design_spec artifacts');
 
     const previewed = syncPreviewArtifacts(
       {

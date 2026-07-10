@@ -62,10 +62,10 @@ test('slice-2 generation/export flow keeps preview and export downstream surface
     const startGenerationManifest = JSON.parse(readFileSync(path.resolve(String(generationManifestArtifact?.storageKey)), 'utf8')) as {
       pages: Array<{ filename: string; storageKey: string; sha256: string }>;
     };
-    const refreshedStartGenerationManifest = JSON.parse(
-      readFileSync(path.resolve(String(refreshedGenerationManifestArtifact?.storageKey)), 'utf8'),
+    const refreshedStartGenerationManifest = JSON.parse(readFileSync(
+      path.resolve(String(refreshedGenerationManifestArtifact?.storageKey)),
       'utf8',
-    ) as {
+    )) as {
       pages: Array<{ filename: string; storageKey: string; sha256: string }>;
     };
     const startProbeStorageKey = String(authoringProbe?.metadata?.storageKey ?? '');
@@ -132,10 +132,10 @@ test('slice-2 generation/export flow keeps preview and export downstream surface
     const resumeGenerationManifest = JSON.parse(readFileSync(path.resolve(String(resumeGenerationManifestArtifact?.storageKey)), 'utf8')) as {
       pages: Array<{ filename: string; storageKey: string; sha256: string }>;
     };
-    const refreshedResumeGenerationManifest = JSON.parse(
-      readFileSync(path.resolve(String(refreshedResumeGenerationManifestArtifact?.storageKey)), 'utf8'),
+    const refreshedResumeGenerationManifest = JSON.parse(readFileSync(
+      path.resolve(String(refreshedResumeGenerationManifestArtifact?.storageKey)),
       'utf8',
-    ) as {
+    )) as {
       pages: Array<{ filename: string; storageKey: string; sha256: string }>;
     };
     const probeStorageKey = String(resumedProbe?.metadata?.storageKey ?? '');

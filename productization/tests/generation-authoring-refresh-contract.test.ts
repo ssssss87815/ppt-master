@@ -33,16 +33,7 @@ function createWorkspaceFixture(): { root: string; workspace: string; project: P
     workspace: {
       projectId: 'pptmaster-generation-authoring-refresh-project',
       workspacePath: workspace,
-      sourceBundlePath: path.join(workspace, 'sources.md'),
-      templateDeckPath: undefined,
-      canvas: '16:9',
-      language: 'zh-CN',
-      createdAt: '2026-07-08T11:00:00.000Z',
-      updatedAt: '2026-07-08T11:00:00.000Z',
     },
-    confirmations: { recommendationCount: 0, status: 'approved', lockedAt: '2026-07-08T11:00:00.000Z' },
-    artifacts: [],
-    activity: [],
     createdAt: '2026-07-08T11:00:00.000Z',
     updatedAt: '2026-07-08T11:00:00.000Z',
   };

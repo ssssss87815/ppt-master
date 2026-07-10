@@ -6,7 +6,7 @@ import { renderProjectWorkbenchShell } from '../app/render-project-workbench-she
 const project = {
   projectId: 'timeline-strategist-focus',
   name: 'Timeline strategist focus',
-  status: 'generation_ready',
+  status: 'spec_ready',
   workspacePath: 'projects/timeline-strategist-focus',
   currentPhase: {
     key: 'strategist',
@@ -52,7 +52,7 @@ const project = {
     artifactCount: 1,
     companionCount: 0,
   },
-} as ProjectViewModel;
+} as unknown as ProjectViewModel;
 
 const html = renderProjectWorkbenchShell(project);
 

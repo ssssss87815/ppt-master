@@ -1,4 +1,5 @@
 import type { ConfirmationKey, ConfirmationRecommendation } from '../../backend/models/confirmations';
+import type { SubmitConfirmationsAction } from '../../backend/models/actions';
 
 export type ConfirmationSubmissionQuestionViewModel = {
   key: ConfirmationKey;
@@ -26,6 +27,8 @@ export type ConfirmationSubmissionViewModel = {
   submitAction: {
     type: 'submit_confirmations';
     projectId: string;
+    confirmationSetId: string;
+    payload: SubmitConfirmationsAction['payload'];
   };
 };
 

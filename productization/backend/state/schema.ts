@@ -8,7 +8,8 @@ export type ProjectStatus =
   | 'preview_available'
   | 'revision_requested'
   | 'export_ready'
-  | 'failed_recoverable';
+  | 'failed_recoverable'
+  | 'failed_terminal';
 
 export const PROJECT_STATUS_ORDER: ProjectStatus[] = [
   'draft',
@@ -21,6 +22,7 @@ export const PROJECT_STATUS_ORDER: ProjectStatus[] = [
   'revision_requested',
   'export_ready',
   'failed_recoverable',
+  'failed_terminal',
 ];
 
 export const PROJECT_STATUS_DESCRIPTIONS: Record<ProjectStatus, string> = {
@@ -34,17 +36,19 @@ export const PROJECT_STATUS_DESCRIPTIONS: Record<ProjectStatus, string> = {
   revision_requested: 'A generated result exists, but the user requested a revision before export.',
   export_ready: 'Exportable artifacts exist and are ready for delivery.',
   failed_recoverable: 'The workflow stopped with a recoverable failure and can be resumed or retried.',
+  failed_terminal: 'The workflow stopped with a terminal failure and requires manual investigation before it can continue.',
 };
 
 export const PROJECT_STATUS_ALLOWED_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
-  draft: ['sources_ready', 'failed_recoverable'],
-  sources_ready: ['confirmation_pending', 'failed_recoverable'],
-  confirmation_pending: ['confirmation_locked', 'failed_recoverable'],
-  confirmation_locked: ['spec_ready', 'failed_recoverable'],
-  spec_ready: ['generation_in_progress', 'failed_recoverable'],
-  generation_in_progress: ['preview_available', 'failed_recoverable'],
-  preview_available: ['revision_requested', 'export_ready', 'failed_recoverable'],
-  revision_requested: ['generation_in_progress', 'failed_recoverable'],
-  export_ready: ['failed_recoverable'],
-  failed_recoverable: ['draft', 'sources_ready', 'confirmation_pending', 'confirmation_locked', 'spec_ready', 'generation_in_progress', 'preview_available', 'revision_requested', 'export_ready'],
+  draft: ['sources_ready', 'failed_recoverable', 'failed_terminal'],
+  sources_ready: ['confirmation_pending', 'failed_recoverable', 'failed_terminal'],
+  confirmation_pending: ['confirmation_locked', 'failed_recoverable', 'failed_terminal'],
+  confirmation_locked: ['spec_ready', 'failed_recoverable', 'failed_terminal'],
+  spec_ready: ['generation_in_progress', 'failed_recoverable', 'failed_terminal'],
+  generation_in_progress: ['preview_available', 'failed_recoverable', 'failed_terminal'],
+  preview_available: ['revision_requested', 'export_ready', 'failed_recoverable', 'failed_terminal'],
+  revision_requested: ['generation_in_progress', 'failed_recoverable', 'failed_terminal'],
+  export_ready: ['failed_recoverable', 'failed_terminal'],
+  failed_recoverable: ['draft', 'sources_ready', 'confirmation_pending', 'confirmation_locked', 'spec_ready', 'generation_in_progress', 'preview_available', 'revision_requested', 'export_ready', 'failed_terminal'],
+  failed_terminal: [],
 };

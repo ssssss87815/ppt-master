@@ -11,6 +11,7 @@ const ORDERED_STATUSES: ProjectStatus[] = [
   'revision_requested',
   'export_ready',
   'failed_recoverable',
+  'failed_terminal',
 ];
 
 export function assertProjectStatus(
@@ -28,5 +29,5 @@ export function isStatusAtLeast(actual: ProjectStatus, minimum: ProjectStatus): 
 }
 
 export function isFailureStatus(status: ProjectStatus): boolean {
-  return status === 'failed_recoverable';
+  return status === 'failed_recoverable' || status === 'failed_terminal';
 }

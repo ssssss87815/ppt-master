@@ -46,7 +46,15 @@ function main() {
     assert.ok(previewBundle?.storageKey.endsWith('/preview/index.json'), 'preview bundle should surface manifest storage key through storageKey');
     assert.equal(previewPage?.pageKey, 'page-1', 'preview page should expose first page key');
     assert.equal(previewPage?.storageKey.endsWith('/svg_output/01_封面｜低碳生活.svg'), true, 'preview page should point at the first workspace svg');
-    assert.equal(previewPage?.metadata?.generationProvenance?.filename, '01_封面｜低碳生活.svg', 'preview page should expose generation provenance for the first svg');
+    const generationProvenance = previewPage?.metadata?.generationProvenance;
+    const generationFilename = generationProvenance && typeof generationProvenance === 'object'
+      ? (generationProvenance as { filename?: unknown }).filename
+      : undefined;
+    assert.equal(
+      generationFilename,
+      '01_封面｜低碳生活.svg',
+      'preview page should expose generation provenance for the first svg',
+    );
 
     const exported = exportLocalPhase(previewed.project, '2026-06-30T16:40:00.000Z');
     const exportNormalizationArtifact = exported.artifacts.find((item) => item.metadata?.verification === 'runtime_workspace_generation_bridge' && item.metadata?.role === 'generation_evidence');

@@ -31,7 +31,7 @@ async function main() {
   const project: ProjectRecord = {
     projectId: 'pitch deck / 2026',
     name: 'Pitch deck route proof',
-    status: 'created',
+    status: 'draft',
     workspace: {
       projectId: 'pitch deck / 2026',
       workspacePath: 'projects/pitch-deck-route-proof',

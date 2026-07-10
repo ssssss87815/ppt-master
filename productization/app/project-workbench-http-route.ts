@@ -1,9 +1,10 @@
-import type { ProjectWorkbenchPageDependencies } from './project-workbench-page';
-import { renderProjectWorkbenchPage } from './project-workbench-page';
-import { applySubmitConfirmations } from '../backend/actions/submit-confirmations.ts';
-import { validateSubmitConfirmationsPayload } from '../backend/models/confirmations.ts';
-import type { SubmitConfirmationsAction } from '../backend/models/actions.ts';
-import type { ProjectRecord } from '../backend/models/projects.ts';
+import type { ProjectWorkbenchPageDependencies } from './project-workbench-page.js';
+import { renderProjectWorkbenchPage } from './project-workbench-page.js';
+import { applySubmitConfirmations } from '../backend/actions/submit-confirmations.js';
+import { validateSubmitConfirmationsPayload } from '../backend/models/confirmations.js';
+import type { SubmitConfirmationsAction } from '../backend/models/actions.js';
+import type { ProductArtifactRef } from '../backend/models/artifacts.js';
+import type { ProjectRecord } from '../backend/models/projects.js';
 
 export type ProjectWorkbenchHttpRequest = {
   method: string;

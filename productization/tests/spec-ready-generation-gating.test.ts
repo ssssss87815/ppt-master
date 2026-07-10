@@ -98,7 +98,7 @@ function main() {
   assert(Boolean(strategistSection), 'strategist section should exist');
   assert(strategistSection?.status === 'warning', 'strategist section should warn and remain blocked while runtime verification is missing');
   assert(
-    strategistSection?.summary.includes('runtime verification'),
+    strategistSection?.summary.includes('runtime verification') ?? false,
     'strategist section summary should explain the runtime verification gate',
   );
   assert(strategistSection?.action === undefined, 'strategist section should not expose a premature generation action while gated');

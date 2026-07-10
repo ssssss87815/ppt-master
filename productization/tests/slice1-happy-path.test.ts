@@ -115,9 +115,9 @@ function main() {
   assert(viewModel.timeline[0]?.key === 'sources', 'timeline should begin with source intake');
   assert(viewModel.timeline[1]?.key === 'confirmations', 'timeline should expose confirmation lock stage second');
   assert(viewModel.timeline[2]?.key === 'strategist', 'timeline should expose strategist handoff stage');
-  assert(viewModel.timeline[2]?.description.length > 0, 'timeline should surface product-visible strategist descriptions');
+  assert((viewModel.timeline[2]?.description?.length ?? 0) > 0, 'timeline should surface product-visible strategist descriptions');
   assert(
-    viewModel.latestCheckpoint?.storageKey?.endsWith(`${submitted.project.latestCheckpointId}.json`),
+    viewModel.latestCheckpoint?.storageKey?.endsWith(`${submitted.project.latestCheckpointId}.json`) ?? false,
     'latest checkpoint should point at checkpoint artifact storage',
   );
   assert(viewModel.nextActions.length === 0, 'spec_ready should not expose generation until strategist runtime is verified');

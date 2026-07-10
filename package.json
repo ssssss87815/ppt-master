@@ -33,16 +33,18 @@
     "runtime:checkpoint-view": "tsx productization/tests/project-view-checkpoint-slice.test.ts",
     "runtime:workbench-ui": "tsx productization/tests/project-workbench-ui-slice.test.ts",
     "runtime:workbench-confirmation-ui": "tsx productization/tests/project-workbench-confirmation-submission-ui.test.ts",
+    "runtime:workbench-confirmation-submit-error-ui": "tsx productization/tests/project-workbench-confirmation-submit-error-ui.test.ts",
     "runtime:workbench-confirmation-integration": "tsx productization/tests/project-workbench-shell-confirmation-submission-integration.test.ts",
     "runtime:workbench-page": "tsx productization/tests/project-workbench-page-slice.test.ts",
     "runtime:workbench-artifact-actions": "tsx productization/tests/project-workbench-artifact-actions-slice.test.ts",
     "runtime:app-shell-render": "tsx productization/tests/project-workbench-app-shell-render.test.ts",
     "runtime:workbench-http-route": "tsx productization/tests/project-workbench-http-route.test.ts",
-    "productization:mainline": "npm run runtime:generation-bridge && npm run runtime:preview-bridge && npm run runtime:export-bridge && npm run runtime:preview-export-richness && npm run runtime:phase-runner-preview && npm run runtime:project-view && npm run runtime:workflow-local && npm run runtime:revision-export && npm run runtime:recoverable-failure && npm run runtime:resume-continuity && npm run runtime:shell-projection && npm run runtime:checkpoint-view && npm run runtime:workbench-ui && npm run runtime:workbench-confirmation-ui && npm run runtime:workbench-confirmation-integration && npm run runtime:workbench-page && npm run runtime:workbench-artifact-actions && npm run runtime:app-shell-render && npm run runtime:workbench-http-route && npm run runtime:workbench-next-action-ui && npm run runtime:workbench-primary-timeline-focus",
+    "productization:mainline": "npm run runtime:generation-bridge && npm run runtime:preview-bridge && npm run runtime:export-bridge && npm run runtime:preview-export-richness && npm run runtime:phase-runner-preview && npm run runtime:project-view && npm run runtime:workflow-local && npm run runtime:revision-export && npm run runtime:recoverable-failure && npm run runtime:resume-continuity && npm run runtime:shell-projection && npm run runtime:checkpoint-view && npm run runtime:workbench-ui && npm run runtime:workbench-confirmation-ui && npm run runtime:workbench-confirmation-submit-error-ui && npm run runtime:workbench-confirmation-integration && npm run runtime:workbench-page && npm run runtime:workbench-artifact-actions && npm run runtime:app-shell-render && npm run runtime:workbench-http-route && npm run runtime:workbench-next-action-ui && npm run runtime:workbench-primary-timeline-focus",
     "runtime:workbench-next-action-ui": "tsx productization/tests/project-workbench-next-action-ui.test.ts",
     "runtime:workbench-primary-timeline-focus": "tsx productization/tests/project-workbench-primary-timeline-focus.test.ts"
   },
   "devDependencies": {
+    "@types/node": "^22.20.1",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   }

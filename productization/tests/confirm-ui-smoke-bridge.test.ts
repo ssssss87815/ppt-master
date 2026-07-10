@@ -9,6 +9,7 @@ import {
   writeConfirmationRecommendationsFile,
   writeConfirmationResultFile,
 } from '../backend/adapter/confirmation-file-bridge';
+import type { ConfirmationRecommendation } from '../backend/models/confirmations';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +23,7 @@ async function main() {
   const port = 5167;
   const baseUrl = `http://127.0.0.1:${port}`;
 
-  const recommendations = [
+  const recommendations: ConfirmationRecommendation[] = [
     { key: 'audience', title: 'Audience', recommendation: 'Founders and seed investors' },
     { key: 'goal', title: 'Goal', recommendation: 'Secure follow-up partner meeting' },
     { key: 'tone', title: 'Tone', recommendation: 'Confident and crisp' },

@@ -38,8 +38,11 @@ function createPreparedShell() {
 
   const checkpoint = {
     checkpointId: 'checkpoint-confirmations-prepared-001',
+    projectId: project.projectId,
     stage: 'confirmations_prepared' as const,
     status: 'completed' as const,
+    statusBefore: 'sources_ready' as const,
+    statusAfter: 'confirmation_pending' as const,
     artifactIds: ['pptmaster-app-shell-project-source-1'],
     note: 'Prepared confirmation recommendations from imported source intake.',
     createdAt: '2026-07-09T12:06:00.000Z',
@@ -55,7 +58,7 @@ function createPreparedShell() {
     prepared.project,
     [...imported.artifacts, prepared.artifact],
     prepared.recommendations,
-    checkpoint,
+    undefined,
     checkpoint,
   );
 }
@@ -249,6 +252,7 @@ function makeArtifactRichShellView(): ProjectViewModel {
     sources: [],
     confirmations: [],
     artifactSummary: {
+      total: 7,
       planned: 7,
       pending: 0,
       ready: 5,
@@ -395,6 +399,7 @@ function makeRecoveryShellView(): ProjectViewModel {
     sources: [],
     confirmations: [],
     artifactSummary: {
+      total: 2,
       planned: 2,
       pending: 0,
       ready: 2,
@@ -602,14 +607,18 @@ function main() {
   assert.match(preparedHtml, /Confirmation submission/);
   assert.match(preparedHtml, /0\/8 answered/);
   assert.match(preparedHtml, /No answers captured yet\. Fill the confirmation prompts below to lock the deck brief\./);
-  assert.match(preparedHtml, /badge badge-neutral">0 answered/);
-  assert.match(preparedHtml, /badge badge-warning">8 pending/);
+  assert.match(preparedHtml, /data-answered-badge/);
+  assert.match(preparedHtml, /0 answered/);
+  assert.match(preparedHtml, /data-pending-badge/);
+  assert.match(preparedHtml, /8 pending/);
+  assert.match(preparedHtml, /data-readiness-state="pending"/);
+  assert.match(preparedHtml, /confirmation answers are still required before submission\./);
   assert.match(preparedHtml, /8 confirmation answers ready for input\./);
   assert.match(preparedHtml, /<dl class="artifact-metadata">[\s\S]*<dt>Completion status<\/dt>[\s\S]*<dd>pending<\/dd>[\s\S]*<dt>Question count<\/dt>[\s\S]*<dd>8<\/dd>[\s\S]*<\/dl>/);
   assert.match(preparedHtml, /<form class="confirmation-form" method="post" action="\/projects\/pptmaster-app-shell-project" data-submit-action="submit_confirmations" data-project-id="pptmaster-app-shell-project">/);
   assert.match(preparedHtml, /fetch\(form\.action,\{method:'POST',headers:\{'content-type':'application\/json'\}/, 'confirmation shell must serialize answers to the JSON POST route');
   assert.match(preparedHtml, /<textarea id="confirmation-input-audience"[\s\S]*name="answers\.audience"[\s\S]*placeholder="Who is the primary audience for this deck\?"[\s\S]*data-confirmation-key="audience"[\s\S]*data-question-index="1"[\s\S]*aria-label="Primary audience"><\/textarea>/);
-  assert.match(preparedHtml, /<button type="submit" class="confirmation-submit-button"[^>]*data-submit-action="submit_confirmations"[^>]*data-project-id="pptmaster-app-shell-project"[^>]*>Submit confirmation answers<\/button>/, 'the visible confirmation CTA should preserve the projected action and project context for a browser-side bridge');
+  assert.match(preparedHtml, /<button type="submit" class="confirmation-submit-button"[^>]*data-submit-action="submit_confirmations"[^>]*data-project-id="pptmaster-app-shell-project"[^>]*disabled[^>]*>Submit confirmation answers<\/button>/, 'the visible confirmation CTA should preserve the projected action and project context for a browser-side bridge while staying disabled until all answers are complete');
   assert.match(preparedHtml, /Placeholder: Who is the primary audience for this deck\?/);
   assert.match(preparedHtml, /data-key="audience" data-state="pending"/);
   assert.match(preparedHtml, /data-key="goal" data-state="pending"/);
@@ -756,8 +765,12 @@ function main() {
   assert.match(previewHtml, /8 answers captured; 0 still need review\./);
   assert.match(previewHtml, /Captured answers/);
   assert.match(previewHtml, /Founders preparing an investor pitch\./);
-  assert.match(previewHtml, /badge badge-success">8 answered/);
-  assert.match(previewHtml, /badge badge-success">0 pending/);
+  assert.match(previewHtml, /data-answered-badge/);
+  assert.match(previewHtml, /8 answered/);
+  assert.match(previewHtml, /data-pending-badge/);
+  assert.match(previewHtml, /0 pending/);
+  assert.match(previewHtml, /data-readiness-state="ready"/);
+  assert.match(previewHtml, /All confirmation answers are complete\. Submission is ready\./);
   assert.match(previewHtml, /<textarea id="confirmation-input-audience" name="answers\.audience" rows="3" placeholder="Who is the primary audience for this deck\?" data-confirmation-key="audience" data-question-index="1" aria-label="Primary audience">Founders preparing an investor pitch\.<\/textarea>/);
   assert.match(previewHtml, /<button type="submit" class="confirmation-submit-button" data-submit-action="submit_confirmations" data-project-id="pptmaster-app-shell-preview-project">Update locked confirmations<\/button>/, 'locked confirmation CTA should retain its browser bridge action context');
 

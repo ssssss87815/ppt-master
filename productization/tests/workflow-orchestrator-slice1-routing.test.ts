@@ -114,12 +114,7 @@ async function main() {
     type: 'prepare_confirmations',
     payload: { projectId: imported.project.projectId },
   };
-  const prepared = await runWorkflowAction(
-    adapter,
-    prepareAction,
-    imported.project,
-    imported.artifacts as ProductArtifactRef[],
-  );
+  const prepared = await runWorkflowAction(adapter, prepareAction, imported.project);
   assert(prepared.project.status === 'confirmation_pending', 'prepare_confirmations should advance to confirmation_pending');
   assert(prepared.nextStatus === 'confirmation_pending', 'prepare_confirmations should expose nextStatus for orchestration consumers');
   const preparedRecommendations = 'recommendations' in prepared ? prepared.recommendations : undefined;

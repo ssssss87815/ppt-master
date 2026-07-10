@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { applyImportSources } from '../backend/actions/import-sources.ts';
 import { applyPrepareConfirmations } from '../backend/actions/prepare-confirmations.ts';
 import { applySubmitConfirmations } from '../backend/actions/submit-confirmations.ts';
+import { renderProjectWorkbenchShell } from '../app/render-project-workbench-shell.ts';
 import type {
   ImportSourcesAction,
   PrepareConfirmationsAction,
@@ -50,6 +51,10 @@ function main() {
   assert.equal(readyView?.completion.completedCount, 0);
   assert.equal(readyView?.completion.totalCount, 8);
   assert.match(readyView?.bannerText ?? '', /8 confirmation answers/i);
+  const readyHtml = renderProjectWorkbenchShell(toProjectViewModel(prepared.project, preparedArtifacts, prepared.recommendations, prepared.checkpoint));
+  assert.match(readyHtml, /data-readiness-state="pending"/, 'pending confirmations should expose pending readiness feedback');
+  assert.match(readyHtml, /0 confirmation answers are still required before submission|[0-9]+ confirmation answers are still required before submission\./i, 'pending confirmations should explain why submission is disabled');
+  assert.match(readyHtml, /class="confirmation-submit-button"[^>]*disabled/, 'pending confirmations should keep the submit CTA disabled');
 
   const audienceQuestion = readyView?.questions.find((item) => item.key === 'audience');
   assert.ok(audienceQuestion, 'audience question should exist');
@@ -89,6 +94,10 @@ function main() {
   assert.equal(submittedView?.completion.totalCount, 8);
   assert.equal(submittedView?.questions.every((item) => item.isAnswered), true);
   assert.equal(submittedView?.questions.find((item) => item.key === 'audience')?.answer, 'Founders');
+  const submittedHtml = renderProjectWorkbenchShell(toProjectViewModel(submitted.project, submittedArtifacts, prepared.recommendations, submitted.checkpoint));
+  assert.match(submittedHtml, /data-readiness-state="ready"/, 'complete confirmations should expose ready readiness feedback');
+  assert.match(submittedHtml, /All confirmation answers are complete\. Submission is ready\./, 'complete confirmations should announce readiness');
+  assert.doesNotMatch(submittedHtml, /class="confirmation-submit-button"[^>]*disabled/, 'complete confirmations should enable the submit CTA');
 
   console.log('project workbench confirmation submission ui test: ok');
 }

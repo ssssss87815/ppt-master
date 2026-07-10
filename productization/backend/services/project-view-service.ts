@@ -1,16 +1,19 @@
-import type { ProjectRecord, WorkflowCheckpoint } from '../models/projects';
-import type { ProductArtifactRef } from '../models/artifacts';
-import type { ProjectStatus } from '../state/schema';
-import type { SubmitConfirmationsAction } from '../models/actions';
+import type { ProjectRecord, WorkflowCheckpoint } from '../models/projects.js';
+import type { ProductArtifactRef } from '../models/artifacts.js';
+import type { ConfirmationRecommendation } from '../models/confirmations.js';
+import type { ProjectStatus } from '../state/schema.js';
+import type { SubmitConfirmationsAction } from '../models/actions.js';
 import {
   toConfirmationSubmissionQuestionViewModel,
   type ConfirmationSubmissionViewModel,
-} from '../../app/viewmodels/confirmation-submission-view-model';
+} from '../../app/viewmodels/confirmation-submission-view-model.js';
 import type {
   ProjectTimelineItemViewModel,
   ProjectWorkbenchSectionViewModel,
   ProjectViewModel,
-} from '../../app/viewmodels/project-view-model';
+} from '../../app/viewmodels/project-view-model.js';
+
+type PreviewItem = NonNullable<NonNullable<ProjectViewModel['preview']>['items']>[number];
 
 const STATUS_TITLES: Record<ProjectStatus, string> = {
   draft: 'Draft',
@@ -23,6 +26,7 @@ const STATUS_TITLES: Record<ProjectStatus, string> = {
   revision_requested: 'Revision requested',
   export_ready: 'Export ready',
   failed_recoverable: 'Recoverable failure',
+  failed_terminal: 'Terminal failure',
 };
 
 const STATUS_DESCRIPTIONS: Record<ProjectStatus, string> = {
@@ -36,6 +40,7 @@ const STATUS_DESCRIPTIONS: Record<ProjectStatus, string> = {
   revision_requested: 'A revision was requested before export can proceed.',
   export_ready: 'Export and delivery artifacts are available.',
   failed_recoverable: 'The workflow paused on a recoverable failure and needs intervention.',
+  failed_terminal: 'The workflow stopped on a terminal failure and requires manual investigation.',
 };
 
 const CHECKPOINT_STATUS_TITLES: Record<WorkflowCheckpoint['status'], string> = {
@@ -189,7 +194,7 @@ function buildStrategistHandoff(artifacts: ProductArtifactRef[]): ProjectViewMod
 
 function buildConfirmationSubmission(
   project: ProjectRecord,
-  recommendations: Array<{ key: string; title: string; recommendation: string }>,
+  recommendations: ConfirmationRecommendation[],
   confirmationResultArtifact?: ProductArtifactRef,
 ): ConfirmationSubmissionViewModel | undefined {
   if (!recommendations.length) {
@@ -198,12 +203,13 @@ function buildConfirmationSubmission(
 
   const answers = confirmationResultArtifact?.metadata?.answers;
   const answerMap = answers && typeof answers === 'object' ? answers as Record<string, unknown> : {};
-  const questions = recommendations.map((recommendation) =>
-    toConfirmationSubmissionQuestionViewModel(
+  const questions = recommendations.map((recommendation) => {
+    const answer = answerMap[recommendation.key];
+    return toConfirmationSubmissionQuestionViewModel(
       recommendation,
-      typeof answerMap[recommendation.key] === 'string' ? answerMap[recommendation.key] : undefined,
-    ),
-  );
+      typeof answer === 'string' ? answer : undefined,
+    );
+  });
   const completedCount = questions.filter((question) => question.isAnswered).length;
   const isComplete = completedCount === questions.length;
   const status = confirmationResultArtifact ? 'submitted' as const : 'ready' as const;
@@ -465,7 +471,7 @@ function buildLatestRevisionRequest(project: ProjectRecord, artifacts: ProductAr
 export function toProjectViewModel(
   project: ProjectRecord,
   artifacts: ProductArtifactRef[],
-  recommendations: Array<{ key: string; title: string; recommendation: string }>,
+  recommendations: ConfirmationRecommendation[],
   latestCheckpoint?: WorkflowCheckpoint,
   lastStartedCheckpoint?: WorkflowCheckpoint,
 ): ProjectViewModel {
@@ -477,10 +483,10 @@ export function toProjectViewModel(
   const confirmationResultArtifact = latestArtifactByKind(artifacts, 'confirmation_result');
   const strategistHandoff = buildStrategistHandoff(artifacts);
   const confirmationSubmission = buildConfirmationSubmission(project, recommendations, confirmationResultArtifact);
-  const previewItems = [
+  const previewItems: PreviewItem[] = [
     ...(previewBundle ? [{
       artifactId: previewBundle.artifactId,
-      kind: previewBundle.kind,
+      kind: 'preview_bundle' as const,
       label: previewBundle.label,
       title: previewBundle.label ?? previewBundle.artifactId,
       storageKey: previewBundle.storageKey,
@@ -488,9 +494,9 @@ export function toProjectViewModel(
       mimeType: previewBundle.mimeType,
       role: 'bundle' as const,
     }] : []),
-    ...previewPageArtifacts.map((artifact) => ({
+    ...previewPageArtifacts.map<PreviewItem>((artifact) => ({
       artifactId: artifact.artifactId,
-      kind: artifact.kind,
+      kind: 'preview_page_svg' as const,
       label: artifact.label,
       title: typeof artifact.metadata?.title === 'string' ? artifact.metadata.title : artifact.label ?? artifact.artifactId,
       storageKey: artifact.storageKey,
@@ -607,19 +613,38 @@ export function toProjectViewModel(
   const nextActions = nextActionsFor(project, confirmationSubmission, strategistHandoff, Boolean(exportView));
   const artifactSummary = buildArtifactSummary(artifacts);
 
-  if (project.status === 'revision_requested' || project.status === 'failed_recoverable') {
+  if (
+    project.status === 'revision_requested'
+    || project.status === 'failed_recoverable'
+    || project.status === 'failed_terminal'
+  ) {
     workbenchSections.push({
       key: 'recovery',
-      title: project.status === 'revision_requested' ? 'Revision recovery' : 'Recoverable failure',
+      title: project.status === 'revision_requested'
+        ? 'Revision recovery'
+        : project.status === 'failed_terminal'
+          ? 'Terminal failure'
+          : 'Recoverable failure',
       status: 'warning',
       summary: project.status === 'revision_requested'
         ? latestRevisionRequest?.note ?? latestCheckpoint?.note ?? 'A revision was requested before export.'
-        : project.lastError ?? 'A recoverable failure paused the workflow.',
+        : project.lastError ?? (project.status === 'failed_terminal'
+            ? 'A terminal failure stopped the workflow.'
+            : 'A recoverable failure paused the workflow.'),
       description: project.status === 'revision_requested'
         ? 'The deck has preview output, but the latest revision note must be addressed before export can resume.'
-        : 'The workflow paused after a recoverable failure. Resume remains blocked until the recovery bridge exists.',
+        : project.status === 'failed_terminal'
+          ? 'The workflow cannot continue automatically after a terminal failure. Manual investigation is required.'
+          : 'The workflow paused after a recoverable failure. Resume remains blocked until the recovery bridge exists.',
       action: project.status === 'revision_requested' ? 'resume_generation' : undefined,
-      badges: [{ tone: 'warning', text: project.status === 'revision_requested' ? 'Revision requested' : 'Recoverable failure' }],
+      badges: [{
+        tone: 'warning',
+        text: project.status === 'revision_requested'
+          ? 'Revision requested'
+          : project.status === 'failed_terminal'
+            ? 'Manual investigation required'
+            : 'Recoverable failure',
+      }],
     });
   }
 
