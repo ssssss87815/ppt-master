@@ -829,6 +829,21 @@ function main() {
   assert.match(artifactRichHtml, /Preview bundle manifest/);
   assert.match(artifactRichHtml, /01_cover\.svg/);
   assert.match(artifactRichHtml, /image\/svg\+xml/);
+  assert.match(artifactRichHtml, /data-preview-page-focus="true"/, 'preview panel should surface the focused preview-page slice when page artifacts exist');
+  assert.match(artifactRichHtml, /Focused preview page/, 'preview panel should label the focused preview-page summary');
+  assert.match(artifactRichHtml, /Select a projected page artifact to inspect its current identifiers\./, 'preview panel should explain the page focus slice honestly');
+  assert.match(artifactRichHtml, /aria-live="polite"/, 'preview page summary should announce focus changes politely');
+  assert.match(artifactRichHtml, /data-preview-page-button="true"/, 'preview page controls should expose stable browser hooks');
+  assert.match(artifactRichHtml, /aria-pressed="true"[\s\S]*data-selected="true"/, 'first preview page should be selected in the server-rendered html');
+  assert.match(artifactRichHtml, /data-preview-page-title="Preview page page-1"/, 'preview page controls should reuse the projected page title');
+  assert.match(artifactRichHtml, /data-preview-page-key="page-1"/, 'preview page controls should reuse the projected page key');
+  assert.match(artifactRichHtml, /data-preview-page-filename="01_cover\.svg"/, 'preview page controls should reuse the projected filename');
+  assert.match(artifactRichHtml, /data-preview-page-storage-key="projects\/pptmaster-app-shell-artifact-project\/svg_output\/01_cover\.svg"/, 'preview page controls should reuse the projected storage key');
+  assert.match(artifactRichHtml, /<dt>Page key<\/dt><dd>page-1<\/dd>/, 'preview page summary should disclose the focused page key');
+  assert.match(artifactRichHtml, /<dt>Filename<\/dt><dd>01_cover\.svg<\/dd>/, 'preview page summary should disclose the focused page filename');
+  assert.match(artifactRichHtml, /<dt>Storage key<\/dt><dd>projects\/pptmaster-app-shell-artifact-project\/svg_output\/01_cover\.svg<\/dd>/, 'preview page summary should disclose the focused page storage key');
+  assert.match(artifactRichHtml, /Selection identifies the projected page artifact\. Use the live preview link to open the current rendered view\./, 'preview page summary should avoid inventing a per-page url when only the live preview exists');
+  assert.match(artifactRichHtml, /data-preview-action="open">Open live preview<\/a>/, 'preview panel should preserve the existing live-preview link');
   assert.match(artifactRichHtml, /Export label/);
   assert.match(artifactRichHtml, /PPTX export/);
   assert.match(artifactRichHtml, /Last run ID/);
@@ -928,6 +943,30 @@ function main() {
   assert.match(artifactRichHtml, /data-role="companion" data-kind="runtime_log"/);
   assert.match(artifactRichHtml, /application\/vnd\.openxmlformats-officedocument\.presentationml\.presentation/);
   assert.match(artifactRichHtml, /text\/markdown/);
+
+  const bundleOnlyPreviewHtml = renderProjectWorkbenchShell({
+    ...makeArtifactRichShellView(),
+    preview: {
+      latestPreviewUrl: '/projects/pptmaster-app-shell-artifact-project/preview/index.json',
+      manifestStorageKey: 'projects/pptmaster-app-shell-artifact-project/preview/index.json',
+      pageCount: 0,
+      pageArtifactIds: [],
+      items: [
+        {
+          artifactId: 'pptmaster-app-shell-artifact-project-preview-bundle',
+          kind: 'preview_bundle',
+          title: 'Preview bundle manifest',
+          storageKey: 'projects/pptmaster-app-shell-artifact-project/preview/index.json',
+          filename: 'index.json',
+          mimeType: 'application/json',
+          role: 'bundle',
+        },
+      ],
+    },
+  });
+
+  assert.match(bundleOnlyPreviewHtml, /Preview assets/, 'bundle-only preview should still render the preview panel');
+  assert.doesNotMatch(bundleOnlyPreviewHtml, /data-preview-page-focus="true"/, 'preview page focus surface should remain absent when no page artifacts exist');
 
   const recoveryHtml = renderProjectWorkbenchShell(makeRecoveryShellView());
 

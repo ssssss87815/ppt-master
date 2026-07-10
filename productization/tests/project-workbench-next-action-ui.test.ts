@@ -19,16 +19,16 @@ const project = {
   lastUpdatedAt: '2026-07-10T12:00:00.000Z',
   workbench: {
     strategistHandoff: {
-      gateStatus: 'pending_runtime_verification',
-      summary: 'Design spec and spec lock exist, but runtime bridge verification is still pending.',
-      detail: 'Keep generation blocked until both strategist handoff artifacts clear runtime verification. The product shell should not treat file presence alone as enough proof.',
-      panelStatus: 'warning',
-      verificationBadgeTone: 'warning',
-      verificationBadgeText: 'Pending runtime bridge verification',
-      gateLabel: 'Verification pending',
-      verifiedArtifactCount: 0,
-      pendingArtifactCount: 2,
-      generationGateCopy: 'Generation handoff locked: wait for runtime bridge verification before starting page generation.',
+      gateStatus: 'verified',
+      summary: 'Design spec and spec lock are runtime-verified and ready for generation.',
+      detail: 'Generation may start from the locked strategist handoff.',
+      panelStatus: 'complete',
+      verificationBadgeTone: 'success',
+      verificationBadgeText: 'Runtime bridge verified',
+      gateLabel: 'Verified',
+      verifiedArtifactCount: 2,
+      pendingArtifactCount: 0,
+      generationGateCopy: 'Generation handoff verified and ready to start page generation.',
       artifacts: [],
     },
     confirmationState: {
@@ -51,8 +51,13 @@ assert.match(
 );
 assert.match(
   html,
+  /<button type="button" class="next-action-button" data-action-code="start_generation" data-project-id="next-action-ui-project">Start Generation<\/button>|<button type="button" class="next-action-button" data-action-code="start_generation" data-project-id="next-action-ui-project">Start generation<\/button>/,
+  'verified start_generation should expose an explicit, project-scoped control',
+);
+assert.doesNotMatch(
+  html,
   /<p class="action-availability">Generation handoff locked: wait for runtime bridge verification before starting page generation\.<\/p>/,
-  'start_generation should explain the runtime strategist gate instead of implying a generic unavailable action',
+  'verified start_generation should stop rendering the old unavailable copy',
 );
 assert.match(
   html,

@@ -416,6 +416,10 @@ def main():
     if not DB.exists():
         print("[pptmaster-autocontinue] no kanban db; silent")
         return 0
+
+    # This process is deliberately a narrow no-agent guard.  Its only allowed
+    # effects are completing a qualifying review card and seeding one unlinked
+    # successor.  It never runs generic root recovery or task dispatch.
     con = sqlite3.connect(str(DB))
     cur = con.cursor()
     root_ok, root_reason = root_is_clean(cur)
@@ -428,6 +432,16 @@ def main():
     cur = con.cursor()
     autoclose_result = autoclose_latest(cur)
     con.close()
+    if autoclose_result == "error":
+        return 1
+
+    # A completion changes the board. Re-open and verify root before the only
+    # other permitted effect (successor creation).  If no card was closed this
+    # tick, do not create work from historical cards; that prevents stale cards
+    # from re-seeding the mainline after a restart.
+    if autoclose_result is None:
+        print("[pptmaster-autocontinue] no qualifying review handoff; silent")
+        return 0
 
     con = sqlite3.connect(str(DB))
     cur = con.cursor()
@@ -438,8 +452,6 @@ def main():
         return 0
     spawn_rc = spawn_next(cur)
     con.close()
-    if autoclose_result == "error":
-        return 1
     return spawn_rc
 
 

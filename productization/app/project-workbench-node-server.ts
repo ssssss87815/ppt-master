@@ -13,9 +13,12 @@ type RequestBodyResult =
   | { body: string }
   | { error: string };
 
+const MAX_REQUEST_BODY_BYTES = 1_000_000;
+
 function readRequestBody(request: IncomingMessage): Promise<RequestBodyResult> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
+    let receivedBytes = 0;
     let settled = false;
 
     const finish = (result: RequestBodyResult) => {
@@ -27,7 +30,14 @@ function readRequestBody(request: IncomingMessage): Promise<RequestBodyResult> {
     };
 
     request.on('data', (chunk: Buffer | string) => {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      receivedBytes += buffer.length;
+      if (receivedBytes > MAX_REQUEST_BODY_BYTES) {
+        finish({ error: 'Request body too large' });
+        request.resume();
+        return;
+      }
+      chunks.push(buffer);
     });
     request.on('end', () => finish({ body: Buffer.concat(chunks).toString('utf8') }));
     request.on('aborted', () => finish({ error: 'Request body aborted' }));
@@ -50,7 +60,7 @@ export function createProjectWorkbenchNodeServer(dependencies: ProjectWorkbenchN
       const bodyResult = await readRequestBody(request);
       if ('error' in bodyResult) {
         writeResponse(response, {
-          status: 400,
+          status: bodyResult.error === 'Request body too large' ? 413 : 400,
           headers: { 'content-type': 'text/plain; charset=utf-8' },
           body: bodyResult.error,
         });

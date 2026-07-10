@@ -258,6 +258,16 @@ async function main() {
   assert.match(page.body, /Workflow status/, 'page should include the shell workflow status slice');
   assert.match(page.body, /Project timeline/, 'page should include the shell timeline slice');
   assert.match(page.body, /Preview assets/, 'page should include the preview panel');
+  assert.match(page.body, /data-preview-page-focus="true"/, 'page should surface the focused preview-page slice when page artifacts exist');
+  assert.match(page.body, /Focused preview page/, 'page should label the focused preview-page summary');
+  assert.match(page.body, /aria-live="polite"/, 'page preview summary should announce focus changes politely');
+  assert.match(page.body, /data-preview-page-button="true"/, 'page should expose preview page controls for browser interaction');
+  assert.match(page.body, /aria-pressed="true"[\s\S]*data-selected="true"/, 'page should render the first preview page as selected');
+  assert.match(page.body, /data-preview-page-key="page-1"/, 'page should reuse the projected page key in the preview focus controls');
+  assert.match(page.body, /data-preview-page-filename="01_cover\.svg"/, 'page should reuse the projected preview filename in the focus controls');
+  assert.match(page.body, /<dt>Storage key<\/dt><dd>projects\/pptmaster-workbench-page-project\/svg_output\/01_cover\.svg<\/dd>/, 'page should disclose the focused preview storage key without inventing a page url');
+  assert.match(page.body, /Selection identifies the projected page artifact\. Use the live preview link to open the current rendered view\./, 'page should explain that selection identifies the artifact while the live preview remains the view action');
+  assert.match(page.body, /data-preview-action="open">Open live preview<\/a>/, 'page should preserve the existing live-preview action');
   assert.match(page.body, /href="#panel-delivery">Delivery package<\/a>/, 'page directory should expose the delivery package panel when delivery data exists');
   assert.match(page.body, /href="#panel-checkpoint">Workflow checkpoint<\/a>/, 'page directory should include the checkpoint slice when checkpoint data exists');
   assert.match(page.body, /checkpoint-preview-synced-001/, 'page checkpoint panel should show the latest projected checkpoint id');

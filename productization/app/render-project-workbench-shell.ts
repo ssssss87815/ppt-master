@@ -18,6 +18,64 @@ function renderBadge(tone: string, text: string): string {
   return `<span class="badge badge-${escapeHtml(tone)}">${escapeHtml(text)}</span>`;
 }
 
+function previewPageLabel(item: PreviewItem): string {
+  return item.title ?? item.label ?? item.pageKey ?? item.filename ?? item.storageKey;
+}
+
+function renderPreviewPageFocus(previewUrl: string | undefined, pageItems: PreviewItem[]): string {
+  if (!pageItems.length) {
+    return '';
+  }
+
+  const initialItem = pageItems[0]!;
+  const controls = pageItems
+    .map((item, index) => {
+      const isSelected = index === 0;
+      return `<li>
+        <button
+          type="button"
+          class="preview-page-button${isSelected ? ' is-selected' : ''}"
+          data-preview-page-button="true"
+          data-preview-page-title="${escapeHtml(previewPageLabel(item))}"
+          data-preview-page-key="${escapeHtml(item.pageKey ?? '')}"
+          data-preview-page-filename="${escapeHtml(item.filename ?? '')}"
+          data-preview-page-storage-key="${escapeHtml(item.storageKey ?? '')}"
+          aria-pressed="${isSelected ? 'true' : 'false'}"
+          data-selected="${isSelected ? 'true' : 'false'}"
+        >
+          <span class="preview-page-button-title">${escapeHtml(previewPageLabel(item))}</span>
+          ${item.pageKey ? `<span class="preview-page-button-key">${escapeHtml(item.pageKey)}</span>` : ''}
+        </button>
+      </li>`;
+    })
+    .join('');
+
+  const helperCopy = previewUrl
+    ? 'Selection identifies the projected page artifact. Use the live preview link to open the current rendered view.'
+    : 'Selection identifies the projected page artifact. No per-page URL is projected in this workbench yet.';
+
+  return `
+    <section class="preview-page-focus" data-preview-page-focus="true" aria-labelledby="preview-page-focus-title">
+      <div class="preview-page-focus-header">
+        <h3 id="preview-page-focus-title">Focused preview page</h3>
+        <p class="section-summary">Select a projected page artifact to inspect its current identifiers.</p>
+      </div>
+      <div class="preview-page-focus-grid">
+        <ol class="preview-page-list">${controls}</ol>
+        <div class="preview-page-summary" data-preview-page-summary="true" aria-live="polite">
+          <p class="preview-page-summary-label">Focused artifact</p>
+          <h4 data-preview-page-field="title">${escapeHtml(previewPageLabel(initialItem))}</h4>
+          <dl class="artifact-metadata preview-page-summary-metadata">
+            ${renderMetadataRow('Page key', initialItem.pageKey)}
+            ${renderMetadataRow('Filename', initialItem.filename)}
+            ${renderMetadataRow('Storage key', initialItem.storageKey)}
+          </dl>
+          <p class="preview-page-summary-note" data-preview-page-note="true">${escapeHtml(helperCopy)}</p>
+        </div>
+      </div>
+    </section>`;
+}
+
 function panelHeadingId(panelKey: string): string {
   return `panel-${panelKey}-title`;
 }
@@ -66,7 +124,7 @@ function formatActionOwner(action: string): string {
 }
 
 function isActionableAction(action: string): boolean {
-  return action === 'submit_confirmations';
+  return action === 'submit_confirmations' || action === 'start_generation';
 }
 
 function actionAvailabilityMessage(project: ProjectViewModel, action: string): string {
@@ -925,6 +983,7 @@ function renderPreviewPanel(project: ProjectViewModel): string {
   const previewAction = previewUrl
     ? `<p class="panel-action"><a class="artifact-link" href="${escapeHtml(previewUrl)}" data-preview-action="open">Open live preview</a></p>`
     : '';
+  const pageFocus = renderPreviewPageFocus(previewUrl, pageItems);
 
   return `
     <section id="panel-preview" class="artifact-panel preview-panel" data-panel="preview" tabindex="-1" aria-labelledby="${panelHeadingId('preview')}">
@@ -934,6 +993,7 @@ function renderPreviewPanel(project: ProjectViewModel): string {
       </header>
       <dl class="artifact-metadata">${rows}</dl>
       ${previewAction}
+      ${pageFocus}
       ${itemList}
     </section>`;
 }
@@ -1324,6 +1384,79 @@ export function renderProjectWorkbenchShell(project: ProjectViewModel): string {
         font-size: 0.86rem;
         margin: 1rem 0 0;
       }
+      .preview-page-focus {
+        margin-top: 1rem;
+        padding: 1rem;
+        border: 1px solid rgba(56, 189, 248, 0.18);
+        border-radius: 0.9rem;
+        background: rgba(15, 23, 42, 0.45);
+      }
+      .preview-page-focus-header {
+        display: grid;
+        gap: 0.45rem;
+      }
+      .preview-page-focus-header h3,
+      .preview-page-summary h4 {
+        margin: 0;
+      }
+      .preview-page-focus-grid {
+        display: grid;
+        gap: 1rem;
+        margin-top: 1rem;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+      }
+      .preview-page-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 0.75rem;
+      }
+      .preview-page-button {
+        width: 100%;
+        border: 1px solid rgba(148, 163, 184, 0.24);
+        border-radius: 0.85rem;
+        background: rgba(15, 23, 42, 0.62);
+        color: var(--text);
+        padding: 0.85rem 1rem;
+        text-align: left;
+        font: inherit;
+        display: grid;
+        gap: 0.25rem;
+        cursor: pointer;
+      }
+      .preview-page-button.is-selected,
+      .preview-page-button[data-selected="true"] {
+        border-color: rgba(56, 189, 248, 0.55);
+        background: rgba(14, 116, 144, 0.22);
+        box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.18);
+      }
+      .preview-page-button-title {
+        font-weight: 700;
+      }
+      .preview-page-button-key,
+      .preview-page-summary-label,
+      .preview-page-summary-note {
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+      .preview-page-summary {
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 0.85rem;
+        padding: 1rem;
+        background: rgba(15, 23, 42, 0.62);
+      }
+      .preview-page-summary-label {
+        margin: 0 0 0.35rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .preview-page-summary-metadata {
+        margin-top: 0.75rem;
+      }
+      .preview-page-summary-note {
+        margin: 0.85rem 0 0;
+      }
       .confirmation-form textarea {
         width: 100%;
         min-height: 7rem;
@@ -1359,6 +1492,7 @@ export function renderProjectWorkbenchShell(project: ProjectViewModel): string {
       @media (max-width: 820px) {
         main { padding: 1rem 0.9rem 2rem; }
         .project-header { padding: 1.2rem; }
+        .preview-page-focus-grid { grid-template-columns: 1fr; }
       }
     </style>
   </head>
@@ -1384,6 +1518,55 @@ export function renderProjectWorkbenchShell(project: ProjectViewModel): string {
         ${body}
       </section>
     </main>
+    <script>
+      document.addEventListener('click', function (event) {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+
+        const button = target.closest('[data-preview-page-button="true"]');
+        if (!(button instanceof HTMLButtonElement)) {
+          return;
+        }
+
+        const panel = button.closest('#panel-preview');
+        if (!(panel instanceof HTMLElement)) {
+          return;
+        }
+
+        const buttons = panel.querySelectorAll('[data-preview-page-button="true"]');
+        buttons.forEach((candidate) => {
+          if (candidate instanceof HTMLElement) {
+            const isSelected = candidate === button;
+            candidate.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+            candidate.setAttribute('data-selected', isSelected ? 'true' : 'false');
+            candidate.classList.toggle('is-selected', isSelected);
+          }
+        });
+
+        const summary = panel.querySelector('[data-preview-page-summary="true"]');
+        if (!(summary instanceof HTMLElement)) {
+          return;
+        }
+
+        const titleField = summary.querySelector('[data-preview-page-field="title"]');
+        if (titleField instanceof HTMLElement) {
+          titleField.textContent = button.dataset.previewPageTitle ?? '';
+        }
+
+        const metadataValues = summary.querySelectorAll('.meta-row dd');
+        if (metadataValues[0] instanceof HTMLElement) {
+          metadataValues[0].textContent = button.dataset.previewPageKey ?? '';
+        }
+        if (metadataValues[1] instanceof HTMLElement) {
+          metadataValues[1].textContent = button.dataset.previewPageFilename ?? '';
+        }
+        if (metadataValues[2] instanceof HTMLElement) {
+          metadataValues[2].textContent = button.dataset.previewPageStorageKey ?? '';
+        }
+      });
+    </script>
   </body>
 </html>`;
 }
