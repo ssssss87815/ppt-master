@@ -6,6 +6,7 @@ import type { PptmasterRuntimeAdapter, ProductActionResult } from '../backend/ad
 import type { ProjectRecord } from '../backend/models/projects';
 import { toProjectViewModel } from '../backend/services/project-view-service';
 import { dispatchProductAction } from '../backend/orchestrator/dispatch';
+import { renderProjectWorkbenchShell } from '../app/render-project-workbench-shell';
 
 const assert: Assert = (condition, message) => {
   if (!condition) {
@@ -59,7 +60,7 @@ async function main() {
 
   const failedView = toProjectViewModel(recoverable, [], [], undefined);
   assert(failedView.status === 'failed_recoverable', 'failed view should preserve failed_recoverable status');
-  assert((failedView as { lastError?: string }).lastError === undefined, 'failed view currently does not project lastError into the view model');
+  assert(failedView.lastError === 'Preview sync timed out while waiting for bundle upload.', 'failed view should project lastError into the view model');
   assert(failedView.latestCheckpoint === undefined, 'failed view should not invent latestCheckpoint without checkpoint payload');
   assert(failedView.lastUpdatedAt === recoverable.updatedAt, 'failed view should preserve project updatedAt');
   assert(failedView.lastStartedCheckpoint === undefined, 'failed view should not invent a last started checkpoint without checkpoint payload');
@@ -70,6 +71,10 @@ async function main() {
     'failed_recoverable view should not advertise resume generation before a revision-backed recovery bridge exists',
   );
   assert(failedView.timeline.every((item) => item.status !== 'failed_recoverable'), 'failed_recoverable should remain an out-of-band status, not a normal timeline step');
+  assert(failedView.workbench.sections.some((item) => item.key === 'recovery'), 'failed_recoverable should project a dedicated recovery section');
+  const failedHtml = renderProjectWorkbenchShell(failedView);
+  assert(failedHtml.includes('data-panel="recovery"'), 'failed shell should render a recovery panel');
+  assert(failedHtml.includes('Preview sync timed out while waiting for bundle upload.'), 'failed shell should render the recoverable lastError');
 
   const calls: string[] = [];
   const adapter: PptmasterRuntimeAdapter = {

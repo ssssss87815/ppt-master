@@ -1,0 +1,39 @@
+{
+  "canvas": "ppt169",
+  "page_count": "10",
+  "audience": "大众科普讲座 / 低碳生活主题宣讲",
+  "mode": "briefing",
+  "visual_style": "soft-rounded",
+  "color": {
+    "name": "源稿环保绿（聊天确认）",
+    "palette": {
+      "background": "#FFFFFF",
+      "secondary_bg": "#F0F7F0",
+      "primary": "#1A5C3A",
+      "accent": "#27AE60",
+      "secondary_accent": "#F39C20",
+      "body_text": "#1A1A1A"
+    }
+  },
+  "icons": "tabler-outline",
+  "typography": {
+    "name": "源稿风格延续（聊天确认）",
+    "heading": {
+      "cjk": "Microsoft YaHei",
+      "latin": "Calibri",
+      "css": "'Microsoft YaHei','Calibri',sans-serif"
+    },
+    "body": {
+      "cjk": "Microsoft YaHei",
+      "latin": "Calibri",
+      "css": "'Microsoft YaHei','Calibri',sans-serif"
+    },
+    "body_size": 21
+  },
+  "formula_policy": "text-only",
+  "image_usage": "none",
+  "generation_mode": "continuous",
+  "refine_spec": false,
+  "status": "confirmed",
+  "confirmed_at": "2026-06-30T00:00:00"
+}

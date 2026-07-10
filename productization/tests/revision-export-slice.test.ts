@@ -7,9 +7,10 @@ import { exportLocalPhase, requestRevision, runResumeGeneration, syncPreviewArti
 import type { ProductArtifactRef } from '../backend/models/artifacts.ts';
 import type { ProjectRecord } from '../backend/models/projects.ts';
 import { toProjectViewModel } from '../backend/services/project-view-service.ts';
+import { renderProjectWorkbenchShell } from '../app/render-project-workbench-shell.ts';
 
 function makeWorkspaceFixture(): { workspacePath: string; cleanup: () => void } {
-  const source = '/tmp/ppt-downstream-svg-probe';
+  const source = 'productization/test-fixtures/runtime-workspace';
   assert.ok(existsSync(source), `fixture source missing: ${source}`);
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'ppt-revision-export-slice-'));
   const workspacePath = path.join(tempRoot, 'workspace');
@@ -65,13 +66,20 @@ function main() {
     const exportArtifacts: ProductArtifactRef[] = [...previewed.artifacts, ...revised.artifacts, ...resumed.artifacts, ...resumedPreview.artifacts, ...exported.artifacts];
 
     const previewView = toProjectViewModel(previewed.project, previewArtifacts, [], previewed.checkpoints[0]);
-    assert.deepEqual(previewView.nextActions, ['Export PPTX'], 'preview_available should suggest export only');
+    assert.deepEqual(previewView.nextActions, ['export_pptx'], 'preview_available should suggest export only');
 
     const revisionView = toProjectViewModel(revised.project, revisionArtifacts, [], revised.checkpoints[0]);
     assert.equal(revisionView.latestCheckpoint?.stage, 'revision_requested', 'revision view should surface latest checkpoint stage');
     assert.equal(revisionView.latestCheckpoint?.status, 'completed', 'revision view should surface latest checkpoint status');
     assert.equal(revisionView.lastUpdatedAt, revised.project.updatedAt, 'revision view should surface revision updatedAt');
     assert.ok((revisionView.latestCheckpoint?.storageKey ?? '').endsWith('.json'), 'revision view should surface a checkpoint storage key');
+    assert.equal(revisionView.latestRevisionRequest?.note, 'Tighten page 1 headline', 'revision view should expose latest revision note');
+    assert.deepEqual(revisionView.nextActions, ['resume_generation'], 'revision_requested should surface resume_generation as the next action');
+    assert.ok(revisionView.workbench.sections.some((item) => item.key === 'recovery'), 'revision_requested should project a dedicated recovery section');
+    const revisionHtml = renderProjectWorkbenchShell(revisionView);
+    assert.match(revisionHtml, /data-panel="recovery"/);
+    assert.match(revisionHtml, /Tighten page 1 headline/);
+    assert.match(revisionHtml, /resume_generation/);
 
     const exportView = toProjectViewModel(exported.project, exportArtifacts, [], exported.checkpoints[0]);
     assert.equal(exportView.nextActions.length, 0, 'export_ready should not suggest another action');
@@ -79,7 +87,7 @@ function main() {
     assert.ok((exportView.artifactSummary?.byKind?.image_manifest ?? 0) >= 1, 'export view should count image_manifest artifacts by kind');
     assert.ok((exportView.artifactSummary?.total ?? 0) >= exportArtifacts.length, 'export view should surface aggregate artifact totals');
     assert.ok((exportView.latestExportUrl ?? '').endsWith('.pptx'), 'export view should expose pptx artifact storage key');
-    assert.ok(exportView.timeline.some((item) => item.key === 'export' && item.status === 'complete'), 'timeline should include complete export stage');
+    assert.ok(exportView.timeline.some((item) => item.key === 'export' && item.status === 'export_ready' && item.reached), 'timeline should include the reached export_ready stage');
     assert.equal(exportView.latestCheckpoint?.stage, 'export_ready', 'export view should surface latest checkpoint stage');
     assert.ok((exportView.export?.latestExportUrl ?? '').endsWith('.pptx'), 'export view should expose export.latestExportUrl as the pptx storage key');
 

@@ -54,7 +54,7 @@ function main() {
 
   assert.equal(readyShellView.projectId, prepared.projectId);
   assert.equal(readyShellView.confirmationSection.title, 'Confirmation status');
-  assert.equal(readyShellView.confirmationSection.summary, '8 recommendations are ready for user review.');
+  assert.equal(readyShellView.confirmationSection.summary, '8 confirmation answers ready for input.');
   assert.deepEqual(
     readyShellView.confirmationSection.submission,
     prepared.view.workbench.confirmationSubmission && prepared.view.workbench.confirmationSubmission.status !== 'not_ready'

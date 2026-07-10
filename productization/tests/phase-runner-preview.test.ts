@@ -8,7 +8,7 @@ import { syncPreviewArtifacts, runStartGeneration } from '../backend/orchestrato
 import type { ProjectRecord } from '../backend/models/projects';
 
 function makeWorkspaceFixture(): { workspacePath: string; cleanup: () => void } {
-  const source = '/tmp/ppt-downstream-svg-probe';
+  const source = 'productization/test-fixtures/runtime-workspace';
   assert.ok(existsSync(source), `fixture source missing: ${source}`);
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'ppt-phase-runner-preview-'));
   const workspacePath = path.join(tempRoot, 'workspace');

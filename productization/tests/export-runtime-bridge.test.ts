@@ -25,7 +25,7 @@ function createProjectFixture(): ProjectRecord {
 test('export runtime bridge emits pptx and companion artifacts from an existing workspace', () => {
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'ppt-export-bridge-'));
   const workspace = path.join(tempRoot, 'project');
-  cpSync('/tmp/ppt-downstream-svg-probe', workspace, { recursive: true });
+  cpSync('productization/test-fixtures/runtime-workspace', workspace, { recursive: true });
 
   const project = createProjectFixture();
   project.workspace.workspacePath = workspace;

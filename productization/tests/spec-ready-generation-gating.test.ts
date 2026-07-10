@@ -96,7 +96,7 @@ function main() {
 
   const strategistSection = viewModel.workbench.sections.find((section) => section.key === 'strategist');
   assert(Boolean(strategistSection), 'strategist section should exist');
-  assert(strategistSection?.status === 'upcoming', 'strategist section should remain incomplete while runtime verification is missing');
+  assert(strategistSection?.status === 'warning', 'strategist section should warn and remain blocked while runtime verification is missing');
   assert(
     strategistSection?.summary.includes('runtime verification'),
     'strategist section summary should explain the runtime verification gate',

@@ -41,14 +41,14 @@ const DEFAULT_PLACEHOLDERS: Record<ConfirmationKey, string> = {
 };
 
 const QUESTION_TITLES: Record<ConfirmationKey, string> = {
-  audience: 'Audience',
-  goal: 'Goal',
-  tone: 'Tone',
-  language: 'Language',
-  brand: 'Brand',
-  outline: 'Outline',
-  visual_style: 'Visual Style',
-  delivery: 'Delivery',
+  audience: 'Primary audience',
+  goal: 'Presentation goal',
+  tone: 'Presentation tone',
+  language: 'Deck language',
+  brand: 'Brand constraints',
+  outline: 'Narrative outline',
+  visual_style: 'Visual style',
+  delivery: 'Delivery mode',
 };
 
 export function toConfirmationSubmissionQuestionViewModel(
@@ -59,7 +59,7 @@ export function toConfirmationSubmissionQuestionViewModel(
 
   return {
     key: recommendation.key,
-    title: recommendation.title || QUESTION_TITLES[recommendation.key],
+    title: QUESTION_TITLES[recommendation.key],
     recommendation: recommendation.recommendation,
     answer: normalizedAnswer,
     isAnswered: normalizedAnswer.length > 0,

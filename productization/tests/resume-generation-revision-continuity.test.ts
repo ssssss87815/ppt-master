@@ -16,7 +16,7 @@ const assert: Assert = (condition, message) => {
 };
 
 function makeWorkspaceFixture(): { workspacePath: string; cleanup: () => void } {
-  const source = '/tmp/ppt-downstream-svg-probe';
+  const source = 'productization/test-fixtures/runtime-workspace';
   assert(existsSync(source), `fixture source missing: ${source}`);
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'ppt-resume-revision-continuity-'));
   const workspacePath = path.join(tempRoot, 'workspace');
@@ -60,7 +60,10 @@ function main() {
     const resumedView = toProjectViewModel(revised.project, revised.artifacts, [], resumed.checkpoints[0]);
     assert(resumedView.latestCheckpoint?.checkpointId === resumed.checkpoints[0]?.checkpointId, 'revision view should surface supplied resume checkpoint payload');
     assert(resumedView.latestCheckpoint?.createdAt === resumed.checkpoints[0]?.createdAt, 'revision view should surface resume checkpoint createdAt when resume checkpoint payload is supplied');
-    assert(resumedView.nextActions.length === 0, 'revision_requested view currently does not advertise a resume action');
+    assert(
+      resumedView.nextActions.length === 1 && resumedView.nextActions[0] === 'resume_generation',
+      'revision_requested view should advertise the resume recovery action in the projected nextActions list',
+    );
 
     let localResumeRejected = false;
     try {

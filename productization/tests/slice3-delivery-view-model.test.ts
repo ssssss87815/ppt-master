@@ -10,7 +10,7 @@ import type { ProductArtifactRef } from '../backend/models/artifacts';
 import type { ProjectRecord } from '../backend/models/projects';
 
 function makeWorkspaceFixture(): { workspacePath: string; cleanup: () => void } {
-  const source = '/tmp/ppt-downstream-svg-probe';
+  const source = 'productization/test-fixtures/runtime-workspace';
   assert.ok(existsSync(source), `fixture source missing: ${source}`);
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'ppt-slice3-delivery-view-'));
   const workspacePath = path.join(tempRoot, 'workspace');

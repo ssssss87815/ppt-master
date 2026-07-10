@@ -92,9 +92,11 @@ function main() {
   assert.equal(viewModel.status, 'confirmations_locked', 'view model should preserve confirmations_locked status');
   assert.equal(viewModel.timeline[0]?.key, 'sources', 'timeline should remain anchored at source intake');
   assert.equal(viewModel.timeline[1]?.key, 'confirmations', 'timeline should project the confirmation step');
-  assert.equal(viewModel.timeline[1]?.status, 'complete', 'confirmation step should be complete after lock');
+  assert.equal(viewModel.timeline[1]?.status, 'confirmation_pending', 'confirmation step should retain its canonical lifecycle status after lock');
+ assert.equal(viewModel.timeline[1]?.reached, true, 'confirmation step should be reached after lock');
   assert.equal(viewModel.timeline[2]?.key, 'strategist', 'timeline should continue to strategist after confirmations');
-  assert.equal(viewModel.timeline[2]?.status, 'upcoming', 'strategist should remain upcoming before spec artifacts exist');
+  assert.equal(viewModel.timeline[2]?.status, 'spec_ready', 'strategist should retain its canonical lifecycle status before spec artifacts exist');
+ assert.equal(viewModel.timeline[2]?.reached, false, 'strategist should remain unreached before spec artifacts exist');
   assert.deepEqual(viewModel.nextActions, [], 'locked confirmations should not invent a generation action before strategist verification exists');
   assert.equal(viewModel.workbench.confirmationSubmission?.status, 'submitted', 'workbench should surface locked confirmation submission state');
   assert.match(viewModel.workbench.confirmationSubmission?.bannerText ?? '', /locked and ready/i, 'locked confirmations should advertise strategist handoff readiness');

@@ -7,7 +7,7 @@ import { exportLocalPhase, syncPreviewArtifacts } from '../backend/orchestrator/
 import type { ProjectRecord } from '../backend/models/projects';
 import { toProjectViewModel } from '../backend/services/project-view-service';
 
-const source = '/tmp/ppt-downstream-svg-probe';
+const source = 'productization/test-fixtures/runtime-workspace';
 assert.ok(existsSync(source), `fixture source missing: ${source}`);
 const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'ppt-inspect-project-view-'));
 const workspacePath = path.join(tempRoot, 'workspace');

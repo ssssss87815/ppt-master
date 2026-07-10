@@ -1,5 +1,6 @@
 export type ExportViewModel = {
   latestExportUrl?: string;
+  latestExportLabel?: string;
   format?: 'pptx';
   filename?: string;
   manifestStorageKey?: string;
@@ -7,4 +8,6 @@ export type ExportViewModel = {
   companionStorageKeys?: string[];
   assetDirectoryStorageKey?: string;
   runId?: string;
+  artifactCount?: number;
+  companionCount?: number;
 };

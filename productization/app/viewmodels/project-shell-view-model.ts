@@ -30,15 +30,25 @@ export type ProjectShellPreviewSectionViewModel = {
 
 export type ProjectShellExportSectionViewModel = {
   latestExportUrl?: string;
+  latestExportLabel?: ExportViewModel['latestExportLabel'];
   format?: ExportViewModel['format'];
+  filename?: ExportViewModel['filename'];
+  companionArtifactIds?: ExportViewModel['companionArtifactIds'];
   companionStorageKeys?: string[];
+  assetDirectoryStorageKey?: ExportViewModel['assetDirectoryStorageKey'];
+  runId?: ExportViewModel['runId'];
+  artifactCount?: ExportViewModel['artifactCount'];
+  companionCount?: ExportViewModel['companionCount'];
 };
 
 export type ProjectShellDeliverySectionViewModel = {
   primaryArtifactId?: string;
   primaryStorageKey?: string;
+  primaryLabel?: NonNullable<ProjectViewModel['delivery']>['primaryLabel'];
   companionArtifactIds?: string[];
   companionStorageKeys?: string[];
+  assetDirectoryStorageKey?: NonNullable<ProjectViewModel['delivery']>['assetDirectoryStorageKey'];
+  runId?: NonNullable<ProjectViewModel['delivery']>['runId'];
   items?: NonNullable<ProjectViewModel['delivery']>['items'];
 };
 
@@ -99,16 +109,26 @@ export function toProjectShellViewModel(project: ProjectViewModel): ProjectShell
     export: project.export
       ? {
           latestExportUrl: project.export.latestExportUrl,
+          latestExportLabel: project.export.latestExportLabel,
           format: project.export.format,
+          filename: project.export.filename,
+          companionArtifactIds: project.export.companionArtifactIds,
           companionStorageKeys: project.export.companionStorageKeys,
+          assetDirectoryStorageKey: project.export.assetDirectoryStorageKey,
+          runId: project.export.runId,
+          artifactCount: project.export.artifactCount,
+          companionCount: project.export.companionCount,
         }
       : undefined,
     delivery: project.delivery
       ? {
           primaryArtifactId: project.delivery.primaryArtifactId,
           primaryStorageKey: project.delivery.primaryStorageKey,
+          primaryLabel: project.delivery.primaryLabel,
           companionArtifactIds: project.delivery.companionArtifactIds,
           companionStorageKeys: project.delivery.companionStorageKeys,
+          assetDirectoryStorageKey: project.delivery.assetDirectoryStorageKey,
+          runId: project.delivery.runId,
           items: project.delivery.items,
         }
       : undefined,

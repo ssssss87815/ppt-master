@@ -16,5 +16,9 @@ export type PreviewViewModel = {
     mimeType?: string;
     role: 'bundle' | 'page';
     pageKey?: string;
+    generationProvenance?: {
+      filename?: string;
+      [key: string]: unknown;
+    };
   }>;
 };

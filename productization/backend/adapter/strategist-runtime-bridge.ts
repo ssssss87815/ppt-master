@@ -70,7 +70,7 @@ export function runStrategistFromLockedConfirmations({
           projectId: project.projectId,
           kind: 'spec_lock',
           scope: 'project',
-          status: 'ready',
+          status: 'locked',
           label: 'Executor entry spec lock (materialized from locked confirmations)',
           storageKey: `${project.workspace.workspacePath}/spec_lock.md`,
           mimeType: 'text/markdown',

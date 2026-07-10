@@ -96,7 +96,7 @@ test('strategist runtime bridge materializes canonical markdown artifacts from l
     const designSpec = requireArtifact(result.artifacts, 'design_spec');
     const specLock = requireArtifact(result.artifacts, 'spec_lock');
     assert.equal(designSpec.status, 'ready');
-    assert.equal(specLock.status, 'ready');
+    assert.equal(specLock.status, 'locked');
 
     const designSpecContent = readFileSync(path.join(workspacePath, 'design_spec.md'), 'utf8');
     const specLockContent = readFileSync(path.join(workspacePath, 'spec_lock.md'), 'utf8');

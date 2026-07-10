@@ -1,0 +1,57 @@
+{
+  "projectId": "runtime-workspace-fixture",
+  "workspacePath": "productization/test-fixtures/runtime-workspace",
+  "generatedAt": "2026-07-10T00:00:00.000Z",
+  "pages": [
+    {
+      "filename": "01_封面｜低碳生活.svg",
+      "storageKey": "svg_output/01_封面｜低碳生活.svg",
+      "sha256": "c44a039ccb738d5cb4ff876d8538d6babd93c9cb91e7d9ec43884137d0b5d87c"
+    },
+    {
+      "filename": "02_什么是低碳生活？.svg",
+      "storageKey": "svg_output/02_什么是低碳生活？.svg",
+      "sha256": "8cf1d351ad5a4c89b626de18d6a78596776d17cbac3d5fbfea3583e3eb237a70"
+    },
+    {
+      "filename": "03_为什么我们要关注碳排放？.svg",
+      "storageKey": "svg_output/03_为什么我们要关注碳排放？.svg",
+      "sha256": "9ac62b6f8ec4bab64ece2aec19ab4bb092e44c3dc280468742c97f6766d11476"
+    },
+    {
+      "filename": "04_我们的碳足迹来自哪里？.svg",
+      "storageKey": "svg_output/04_我们的碳足迹来自哪里？.svg",
+      "sha256": "6a7b0e8060d49d18f3cc8d237ad710c03edc46f8f64d17cbc3fee0110c35a904"
+    },
+    {
+      "filename": "05_行动一：绿色出行.svg",
+      "storageKey": "svg_output/05_行动一：绿色出行.svg",
+      "sha256": "f0441cb42738eefade98e1cec042a0ba15d907e34ac007cd4ac1dc1e61a7b852"
+    },
+    {
+      "filename": "06_行动二：节能降耗.svg",
+      "storageKey": "svg_output/06_行动二：节能降耗.svg",
+      "sha256": "0c77750691542a67a271273731248bf8a2f790f184465f0e431f963285cb1bb6"
+    },
+    {
+      "filename": "07_行动三：减少浪费.svg",
+      "storageKey": "svg_output/07_行动三：减少浪费.svg",
+      "sha256": "86c7af37252fc7884bcf5c74a3e3342cba02072cccbfa62bc7f542c7aef17f58"
+    },
+    {
+      "filename": "08_行动四：低碳饮食.svg",
+      "storageKey": "svg_output/08_行动四：低碳饮食.svg",
+      "sha256": "13ef5c933d7b78e4128932162a93ed55aff9d1f59242456ada9927cfe6589662"
+    },
+    {
+      "filename": "09_低碳生活的多重收益.svg",
+      "storageKey": "svg_output/09_低碳生活的多重收益.svg",
+      "sha256": "57573dca504a92b4e7fac0b5ac7987dace92eb6dc6d2fcead02dfe6abd35d724"
+    },
+    {
+      "filename": "10_结语：从今天开始，做低碳生活践行者.svg",
+      "storageKey": "svg_output/10_结语：从今天开始，做低碳生活践行者.svg",
+      "sha256": "e84461610a7597f3497a684fd07d3bf56676dcf0da039d0d0f86d7128c599736"
+    }
+  ]
+}

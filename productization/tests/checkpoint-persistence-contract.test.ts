@@ -53,7 +53,7 @@ function assertLatestCheckpoint(
 }
 
 function makeWorkspaceFixture(): { workspacePath: string; cleanup: () => void } {
-  const source = '/tmp/ppt-downstream-svg-probe';
+  const source = 'productization/test-fixtures/runtime-workspace';
   assert(existsSync(source), `fixture source missing: ${source}`);
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'ppt-checkpoint-persistence-'));
   const workspacePath = path.join(tempRoot, 'workspace');

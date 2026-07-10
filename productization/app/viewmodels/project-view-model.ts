@@ -5,6 +5,7 @@ import type { ProjectStatus } from '../../backend/state/schema';
 import type { ConfirmationSubmissionViewModel } from './confirmation-submission-view-model';
 
 export type ProjectTimelineItemViewModel = {
+  key: 'sources' | 'confirmations' | 'strategist' | 'preview' | 'export';
   status: ProjectStatus;
   title: string;
   description?: string;
@@ -16,7 +17,7 @@ export type ProjectTimelineItemViewModel = {
 export type ProjectWorkbenchSectionStatus = 'ready' | 'current' | 'upcoming' | 'complete' | 'warning';
 
 export type ProjectWorkbenchSectionViewModel = {
-  key: 'timeline' | 'sources' | 'confirmations' | 'checkpoint' | 'preview' | 'export' | 'strategist';
+  key: 'timeline' | 'sources' | 'confirmations' | 'checkpoint' | 'preview' | 'export' | 'strategist' | 'recovery';
   title: string;
   status: ProjectWorkbenchSectionStatus;
   summary: string;
@@ -26,6 +27,29 @@ export type ProjectWorkbenchSectionViewModel = {
     tone: 'neutral' | 'active' | 'success' | 'warning';
     text: string;
   }>;
+};
+
+export type StrategistVerificationArtifactViewModel = {
+  artifactId: string;
+  kind: 'design_spec' | 'spec_lock';
+  label?: string;
+  status: 'planned' | 'pending' | 'ready' | 'locked' | 'superseded' | 'failed';
+  verificationState: 'verified' | 'pending_runtime_verification';
+  storageKey?: string;
+};
+
+export type StrategistHandoffViewModel = {
+  gateStatus: 'verified' | 'pending_runtime_verification';
+  summary: string;
+  detail: string;
+  panelStatus: ProjectWorkbenchSectionStatus;
+  verificationBadgeTone: 'success' | 'warning';
+  verificationBadgeText: string;
+  gateLabel: string;
+  verifiedArtifactCount: number;
+  pendingArtifactCount: number;
+  generationGateCopy: string;
+  artifacts: StrategistVerificationArtifactViewModel[];
 };
 
 export type SourceItemViewModel = {
@@ -46,6 +70,7 @@ export type ProjectViewModel = {
   projectId: string;
   name: string;
   status: ProjectStatus;
+  workspacePath?: string;
   title?: string;
   description?: string;
   currentPhase: {
@@ -68,6 +93,15 @@ export type ProjectViewModel = {
   latestExportUrl?: string;
   preview?: PreviewViewModel;
   export?: ExportViewModel;
+  latestRevisionRequest?: {
+    revisionId: string;
+    note: string;
+    status: 'requested';
+    requestedAt: string;
+    sourceStatus: Extract<ProjectStatus, 'preview_available'>;
+    targetStatus: Extract<ProjectStatus, 'revision_requested'>;
+    checkpointId?: string;
+  };
   lastStartedCheckpoint?: {
     checkpointId: string;
     storageKey: string;
@@ -112,6 +146,7 @@ export type ProjectViewModel = {
     note?: string;
   };
   artifactSummary?: {
+    total: number;
     planned: number;
     pending: number;
     ready: number;
@@ -123,8 +158,11 @@ export type ProjectViewModel = {
   workbench: {
     timeline?: ProjectTimelineItemViewModel[];
     currentTimelineItem?: ProjectTimelineItemViewModel;
+    strategistHandoff?: StrategistHandoffViewModel;
     sections: ProjectWorkbenchSectionViewModel[];
     confirmationState: {
+      hasRecommendations?: boolean;
+      hasConfirmationResult?: boolean;
       recommendationCount: number;
       answeredCount: number;
       locked: boolean;

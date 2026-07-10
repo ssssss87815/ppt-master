@@ -8,7 +8,7 @@ import type { ProjectRecord } from '../backend/models/projects';
 import { toProjectViewModel } from '../backend/services/project-view-service';
 
 function makeWorkspaceFixture(): { workspacePath: string; cleanup: () => void } {
-  const source = '/tmp/ppt-downstream-svg-probe';
+  const source = 'productization/test-fixtures/runtime-workspace';
   assert.ok(existsSync(source), `fixture source missing: ${source}`);
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'ppt-project-view-runtime-'));
   const workspacePath = path.join(tempRoot, 'workspace');

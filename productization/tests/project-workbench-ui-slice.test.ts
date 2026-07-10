@@ -17,7 +17,7 @@ import type { ProjectRecord } from '../backend/models/projects.ts';
 import { toProjectViewModel } from '../backend/services/project-view-service.ts';
 
 function makeWorkspaceFixture(projectId: string): { workspacePath: string; cleanup: () => void } {
-  const source = '/tmp/ppt-downstream-svg-probe';
+  const source = 'productization/test-fixtures/runtime-workspace';
   assert.ok(existsSync(source), `fixture source missing: ${source}`);
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'ppt-workbench-ui-slice-'));
   const workspacePath = path.join(tempRoot, projectId);
@@ -92,10 +92,10 @@ function main() {
     const postLockArtifacts = [...preparedArtifacts, ...submitted.artifacts] as ProductArtifactRef[];
     const postLockView = toProjectViewModel(submitted.project, postLockArtifacts, prepared.recommendations, submitted.checkpoint);
 
-    assert.equal(postLockView.status, 'spec_ready', 'post-lock view should advance to spec_ready');
+    assert.equal(postLockView.status, 'spec_ready', 'post-lock view should advance to spec_ready only after the strategist runtime bridge materializes a ready design spec and locked spec lock');
     assert.equal(postLockView.workbench.confirmationSubmission?.status, 'submitted', 'confirmation submission should show submitted after lock');
     assert.match(postLockView.workbench.confirmationSubmission?.bannerText ?? '', /locked and ready/i, 'submitted banner should describe strategist handoff readiness');
-    assert.ok((postLockView.artifactSummary.byKind.design_spec ?? 0) >= 1, 'artifact summary should count strategist design_spec artifacts');
+    assert.ok((postLockView.artifactSummary.byKind.design_spec ?? 0) >= 1, 'artifact summary should count materialized strategist design_spec artifacts');
 
     const previewed = syncPreviewArtifacts(
       {

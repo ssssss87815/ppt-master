@@ -25,7 +25,7 @@ function createProjectFixture(): ProjectRecord {
 test('slice-2 generation/export flow keeps preview and export downstream surfaces aligned with refreshed post-authoring evidence', () => {
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'ppt-generation-flow-'));
   const workspace = path.join(tempRoot, 'project');
-  cpSync('/tmp/ppt-downstream-svg-probe', workspace, { recursive: true });
+  cpSync('productization/test-fixtures/runtime-workspace', workspace, { recursive: true });
 
   const project = createProjectFixture();
   project.workspace.workspacePath = workspace;

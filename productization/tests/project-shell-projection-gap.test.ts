@@ -42,20 +42,30 @@ function makeProjectView(): ProjectViewModel {
     },
     export: {
       latestExportUrl: '/projects/pptmaster-demo-project/exports/demo.pptx',
+      latestExportLabel: 'PPTX export',
       format: 'pptx',
-      companionStorageKeys: [
-        'projects/pptmaster-demo-project/exports/demo.md',
-        'projects/pptmaster-demo-project/exports/demo_files/image_manifest.json',
-      ],
-    },
-    delivery: {
-      primaryArtifactId: 'pptmaster-demo-project-export-pptx',
-      primaryStorageKey: 'projects/pptmaster-demo-project/exports/demo.pptx',
+      filename: 'demo.pptx',
       companionArtifactIds: ['pptmaster-demo-project-export-md', 'pptmaster-demo-project-image-manifest'],
       companionStorageKeys: [
         'projects/pptmaster-demo-project/exports/demo.md',
         'projects/pptmaster-demo-project/exports/demo_files/image_manifest.json',
       ],
+      assetDirectoryStorageKey: 'projects/pptmaster-demo-project/exports/demo_files',
+      runId: 'run-export-001',
+      artifactCount: 3,
+      companionCount: 2,
+    },
+    delivery: {
+      primaryArtifactId: 'pptmaster-demo-project-export-pptx',
+      primaryStorageKey: 'projects/pptmaster-demo-project/exports/demo.pptx',
+      primaryLabel: 'PPTX export',
+      companionArtifactIds: ['pptmaster-demo-project-export-md', 'pptmaster-demo-project-image-manifest'],
+      companionStorageKeys: [
+        'projects/pptmaster-demo-project/exports/demo.md',
+        'projects/pptmaster-demo-project/exports/demo_files/image_manifest.json',
+      ],
+      assetDirectoryStorageKey: 'projects/pptmaster-demo-project/exports/demo_files',
+      runId: 'run-export-001',
       items: [
         {
           artifactId: 'pptmaster-demo-project-export-pptx',
@@ -99,7 +109,17 @@ assert.deepEqual(shell.preview?.pageArtifactIds, ['pptmaster-demo-project-page-1
 assert.equal(shell.preview?.items?.[0]?.artifactId, 'pptmaster-demo-project-preview-bundle');
 assert.equal(shell.preview?.items?.[1]?.pageKey, 'page-1');
 assert.equal(shell.export?.latestExportUrl, '/projects/pptmaster-demo-project/exports/demo.pptx');
+assert.equal(shell.export?.latestExportLabel, 'PPTX export');
+assert.equal(shell.export?.filename, 'demo.pptx');
+assert.deepEqual(shell.export?.companionArtifactIds, ['pptmaster-demo-project-export-md', 'pptmaster-demo-project-image-manifest']);
 assert.equal(shell.export?.companionStorageKeys?.[0], 'projects/pptmaster-demo-project/exports/demo.md');
+assert.equal(shell.export?.assetDirectoryStorageKey, 'projects/pptmaster-demo-project/exports/demo_files');
+assert.equal(shell.export?.runId, 'run-export-001');
+assert.equal(shell.export?.artifactCount, 3);
+assert.equal(shell.export?.companionCount, 2);
 assert.equal(shell.delivery?.primaryArtifactId, 'pptmaster-demo-project-export-pptx');
+assert.equal(shell.delivery?.primaryLabel, 'PPTX export');
 assert.equal(shell.delivery?.companionArtifactIds?.length, 2);
+assert.equal(shell.delivery?.assetDirectoryStorageKey, 'projects/pptmaster-demo-project/exports/demo_files');
+assert.equal(shell.delivery?.runId, 'run-export-001');
 console.log('project-shell projection gap test: ok');

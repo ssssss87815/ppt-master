@@ -67,7 +67,7 @@ export function applySubmitConfirmations(
   const checkpoint: WorkflowCheckpoint = {
     ...checkpointBase,
     artifactIds: [resultArtifact.artifactId, ...strategist.artifacts.map((item) => item.artifactId)],
-    statusAfter: strategist.artifacts.some((item) => item.kind === 'spec_lock' && item.status === 'ready')
+    statusAfter: strategist.artifacts.some((item) => item.kind === 'spec_lock' && item.status === 'locked')
       ? 'spec_ready'
       : 'confirmation_locked',
   };

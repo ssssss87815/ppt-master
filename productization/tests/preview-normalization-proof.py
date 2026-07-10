@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path('/home/ubuntu/projects/ppt-master-upstream')
-PROJECT_SOURCE = Path('/tmp/ppt-downstream-svg-probe')
+PROJECT_SOURCE = Path('productization/test-fixtures/runtime-workspace')
 
 with tempfile.TemporaryDirectory(prefix='ppt-preview-normalization-proof-') as temp_dir:
     workspace = Path(temp_dir) / 'workspace'
