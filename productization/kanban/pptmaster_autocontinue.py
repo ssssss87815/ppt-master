@@ -5,6 +5,7 @@ import sqlite3
 import os
 import subprocess
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Iterable, Any
 
@@ -32,8 +33,9 @@ def root_is_clean(cur) -> tuple[bool, str]:
     if root is None:
         return False, "root-missing"
     status, block_kind, claim_lock, worker_pid, current_run_id = root
-    tracker_blocked = status == "blocked" and block_kind == "needs_input"
-    if status not in ("todo", "ready") and not tracker_blocked:
+    tracker_blocked = status == "blocked" and block_kind in {"needs_input", "waiting_dependency"}
+    if status not in {"todo", "ready"} and not tracker_blocked:
+        return False, f"root-status-{status}"
         return False, f"root-status-{status}"
     if any(value is not None for value in (claim_lock, worker_pid, current_run_id)):
         return False, "root-has-active-execution-state"
@@ -289,17 +291,21 @@ def existing_open_title(cur, marker):
     return row
 
 
+def candidate_fingerprint(candidate_text: str) -> str:
+    return sha256(candidate_text.strip().encode('utf-8')).hexdigest()[:16]
+
+
 def candidate_seen_recently(cur, candidate_text: str, recent_limit=8):
-    needle = candidate_text.strip()
+    fingerprint = candidate_fingerprint(candidate_text)
     rows = cur.execute(
         """
-        SELECT title, status
+        SELECT title, body, result
         FROM tasks
-        WHERE title LIKE ?
+        WHERE title LIKE ? OR body LIKE ? OR result LIKE ?
         ORDER BY coalesce(completed_at, created_at) DESC
         LIMIT ?
         """,
-        (f"%: {needle} [%", recent_limit),
+        (f"%[candidate:{fingerprint}]%", f"%candidate_fingerprint={fingerprint}%", f"%candidate_fingerprint={fingerprint}%", recent_limit),
     ).fetchall()
     return len(rows) > 0
 
@@ -390,7 +396,9 @@ def spawn_next(cur):
             print(f"[pptmaster-autocontinue] suppressing duplicate recent candidate from {task_id}: {candidate}")
             continue
         body = lane_body(lane, task_id, candidate)
-        title = f"{lane.spawn_title_prefix}: {candidate} [{marker}]"
+        fingerprint = candidate_fingerprint(candidate)
+        title = f"{lane.spawn_title_prefix}: {candidate} [{marker}] [candidate:{fingerprint}]"
+        body = f"candidate_fingerprint={fingerprint}\n{body}"
         cmd = "{hermes} kanban --board {board} create {title} --assignee {assignee} --body {body}".format(
             hermes=subprocess.list2cmdline([HERMES_BIN]),
             board=BOARD,

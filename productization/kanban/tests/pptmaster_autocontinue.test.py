@@ -25,7 +25,10 @@ with tempfile.TemporaryDirectory() as tmp:
     con.execute("update tasks set status = 'blocked', block_kind = 'needs_input' where id = 'root'")
     assert module.root_is_clean(cur) == (True, 'ok')
 
-    con.execute("update tasks set status = 'running' where id = 'root'")
+    con.execute("update tasks set status = 'blocked', block_kind = 'other' where id = 'root'")
+    assert module.root_is_clean(cur) == (False, 'root-status-blocked')
+
+    con.execute("update tasks set status = 'running', block_kind = null where id = 'root'")
     assert module.root_is_clean(cur) == (False, 'root-status-running')
 
     con.execute("update tasks set status = 'ready', claim_lock = 'lock' where id = 'root'")
@@ -34,6 +37,8 @@ with tempfile.TemporaryDirectory() as tmp:
     con.execute("update tasks set claim_lock = null where id = 'root'")
     con.execute("insert into task_links values ('lane', 'root')")
     assert module.root_is_clean(cur) == (False, 'root-has-1-incoming-links')
+    assert module.candidate_fingerprint('a genuine successor') == module.candidate_fingerprint('a genuine successor')
+    assert module.candidate_fingerprint('a genuine successor') != module.candidate_fingerprint('different successor')
     module.ROOT_TASK_ID = original_root
     con.close()
 

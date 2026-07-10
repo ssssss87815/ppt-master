@@ -90,10 +90,10 @@ async function main() {
     assert.match(await oversizedSubmit.text(), /Request body too large/i);
 
     const startGenerationPayload = JSON.stringify({ action: 'start_generation' });
-    const workspaceRoot = mkdtempSync(path.join(os.tmpdir(), 'ppt-workbench-node-generation-'));
-    const generationWorkspace = path.join(workspaceRoot, 'runtime-workspace');
-    cpSync(path.resolve('productization/test-fixtures/runtime-workspace'), generationWorkspace, { recursive: true });
+    const root = mkdtempSync(path.join(os.tmpdir(), 'ppt-workbench-node-generation-'));
+    const generationWorkspace = path.join(root, 'runtime-workspace');
     try {
+      cpSync(path.resolve('productization/test-fixtures/runtime-workspace'), generationWorkspace, { recursive: true });
       const generationProject: ProjectRecord = {
         ...project,
         status: 'spec_ready',
@@ -162,7 +162,7 @@ async function main() {
       await once(generationServer, 'close');
     }
     } finally {
-      rmSync(workspaceRoot, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
     }
   } finally {
     if (server.listening) {

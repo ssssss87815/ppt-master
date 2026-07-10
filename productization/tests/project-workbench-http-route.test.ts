@@ -119,10 +119,10 @@ async function main() {
   assert.equal(unsupportedAction.status, 400, 'unsupported POST actions should be rejected honestly');
   assert.match(unsupportedAction.body, /Unsupported action: export_pptx/);
 
-  const workspaceRoot = mkdtempSync(path.join(os.tmpdir(), 'ppt-workbench-route-generation-'));
-  const generationWorkspace = path.join(workspaceRoot, 'runtime-workspace');
-  cpSync(path.resolve('productization/test-fixtures/runtime-workspace'), generationWorkspace, { recursive: true });
+  const root = mkdtempSync(path.join(os.tmpdir(), 'ppt-workbench-route-generation-'));
+  const generationWorkspace = path.join(root, 'runtime-workspace');
   try {
+    cpSync(path.resolve('productization/test-fixtures/runtime-workspace'), generationWorkspace, { recursive: true });
     const generationProject: ProjectRecord = {
       ...project,
       status: 'spec_ready',
@@ -174,7 +174,7 @@ async function main() {
   assert.match(startGeneration.body, /Generation in progress|Preview assets|preview page/i, 'start_generation response should reflect the persisted generation phase');
   assert.match(startGeneration.body, /Preview|Start generation|Resume generation/i, 'start_generation response should render the updated workbench view');
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
   }
 
   console.log('project workbench http route test: ok');
