@@ -2,16 +2,48 @@
 import json
 import re
 import sqlite3
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Any
 
-BOARD = "ppt-master-productization"
-DB = Path(f"/root/.hermes/kanban/boards/{BOARD}/kanban.db")
-ASSIGNEE = "coder"
-REPO_ROOT = Path("/root/projects/ppt-master-upstream")
+BOARD = os.environ.get("HERMES_KANBAN_BOARD", "ppt-master-productization-mainline")
+DB = Path(
+    os.environ.get(
+        "PPTMASTER_KANBAN_DB",
+        f"/home/ubuntu/.hermes/kanban/boards/{BOARD}/kanban.db",
+    )
+)
+ASSIGNEE = os.environ.get("PPTMASTER_KANBAN_ASSIGNEE", "coder")
+REPO_ROOT = Path(
+    os.environ.get("PPTMASTER_REPO_ROOT", str(Path(__file__).resolve().parents[2]))
+).resolve()
 REGISTRY_PATH = REPO_ROOT / "productization/kanban/lane-registry.json"
+HERMES_BIN = os.environ.get("HERMES_BIN", "/home/ubuntu/.local/bin/hermes")
+ROOT_TASK_ID = os.environ.get("PPTMASTER_ROOT_TASK_ID", "t_a4281740")
+
+
+def root_is_clean(cur) -> tuple[bool, str]:
+    root = cur.execute(
+        "SELECT status, block_kind, claim_lock, worker_pid, current_run_id FROM tasks WHERE id = ?",
+        (ROOT_TASK_ID,),
+    ).fetchone()
+    if root is None:
+        return False, "root-missing"
+    status, block_kind, claim_lock, worker_pid, current_run_id = root
+    tracker_blocked = status == "blocked" and block_kind == "needs_input"
+    if status not in ("todo", "ready") and not tracker_blocked:
+        return False, f"root-status-{status}"
+    if any(value is not None for value in (claim_lock, worker_pid, current_run_id)):
+        return False, "root-has-active-execution-state"
+    inbound = cur.execute(
+        "SELECT COUNT(*) FROM task_links WHERE child_id = ?",
+        (ROOT_TASK_ID,),
+    ).fetchone()[0]
+    if inbound:
+        return False, f"root-has-{inbound}-incoming-links"
+    return True, "ok"
 
 
 @dataclass(frozen=True)
@@ -291,9 +323,10 @@ def autoclose_latest(cur):
             ensure_ascii=False,
         )
         cmd = (
-            "hermes kanban --board {board} complete {task_id} "
+            "{hermes} kanban --board {board} complete {task_id} "
             "--result {result} --summary {summary} --metadata {metadata}"
         ).format(
+            hermes=subprocess.list2cmdline([HERMES_BIN]),
             board=BOARD,
             task_id=task_id,
             result=subprocess.list2cmdline([lane.autoclose_result]),
@@ -358,7 +391,8 @@ def spawn_next(cur):
             continue
         body = lane_body(lane, task_id, candidate)
         title = f"{lane.spawn_title_prefix}: {candidate} [{marker}]"
-        cmd = "hermes kanban --board {board} create {title} --assignee {assignee} --body {body}".format(
+        cmd = "{hermes} kanban --board {board} create {title} --assignee {assignee} --body {body}".format(
+            hermes=subprocess.list2cmdline([HERMES_BIN]),
             board=BOARD,
             title=subprocess.list2cmdline([title]),
             assignee=ASSIGNEE,
@@ -384,10 +418,24 @@ def main():
         return 0
     con = sqlite3.connect(str(DB))
     cur = con.cursor()
-    autoclose_result = autoclose_latest(cur)
+    root_ok, root_reason = root_is_clean(cur)
     con.close()
+    if not root_ok:
+        print(f"[pptmaster-autocontinue] root invariant not clean; silent: {root_reason}")
+        return 0
+
     con = sqlite3.connect(str(DB))
     cur = con.cursor()
+    autoclose_result = autoclose_latest(cur)
+    con.close()
+
+    con = sqlite3.connect(str(DB))
+    cur = con.cursor()
+    root_ok, root_reason = root_is_clean(cur)
+    if not root_ok:
+        con.close()
+        print(f"[pptmaster-autocontinue] root invariant changed; no successor: {root_reason}")
+        return 0
     spawn_rc = spawn_next(cur)
     con.close()
     if autoclose_result == "error":
