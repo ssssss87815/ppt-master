@@ -1,260 +1,134 @@
 # PPTMASTER Productization — Current Status
 
-[中文](./zh/productization-current-status.md) | [English](./productization-current-status.md)
-
----
+> **Status:** A runtime-backed Project Workbench slice is implemented and verified through the locked-confirmations gate. It is an integration layer over PPT Master, **not** a replacement presentation-generation workflow or a complete production application.
+>
+> **Updated:** 2026-07-10
+>
+> **Current verification baseline:**
+> - `npx tsc -p tsconfig.json --noEmit` — pass
+> - `npm run productization:mainline` — pass
+> - direct `productization/tests/*.test.ts` inventory — 45 pass / 0 fail
 
 ## Purpose
 
-This note records **where the productization effort actually is now**, compared with the architecture anchor and the original Slice 1 / MVP skeleton documents.
+This document records the actual state of `productization/` so future work does not:
 
-It is not a new architecture proposal. It is a status alignment note so future implementation work does not confuse:
+- recreate the delivered workbench confirmation slice;
+- claim a deployed product application, security boundary, or persistence implementation that this repository does not provide;
+- bypass the PPT Master workflow with UI-only state or fabricated artifacts;
+- treat checked-in runtime fixtures as evidence of a production host.
 
-- architecture intent
-- backend contract progress
-- real product-shell/UI progress
+The authoritative workflow is `skills/ppt-master/SKILL.md`:
 
----
+```text
+Source intake
+  -> Eight Confirmations
+  -> Strategist runtime verification
+  -> spec lock / spec_ready gate
+  -> generation
+  -> workspace-derived preview
+  -> export PPTX
+```
 
-## One-line status
+Productization may project, persist, and gate that flow. It must not invent a second workflow, mark later phases complete early, or construct workspace paths in UI-facing contracts.
 
-> **PPTMASTER productization has moved beyond the original Slice 1 boundary at the backend contract / orchestrator level, but it has not yet landed a real workbench UI shell.**
+## Implemented and verified
 
-A more concrete phrasing:
+### 1. State, actions, and runtime boundaries
 
-> **The system already has multi-slice productization state, actions, checkpoints, artifact refs, and view models through preview / revision / export shell stages, but the user-facing workbench product surface is still largely absent.**
+The repository has:
 
----
+- project, artifact, checkpoint, and workspace mapping contracts;
+- source import and confirmation preparation actions;
+- explicit project state and guarded phase transitions;
+- adapters for strategist, generation, preview, and export runtime truth;
+- project view-model projection rather than UI-derived workflow state.
 
-## Status relative to the architecture document
+Workspace mapping remains backend/adapter responsibility. UI-facing contracts consume metadata, project state, checkpoints, and artifacts rather than constructing repository paths.
 
-The architecture anchor (`productization-architecture.md`) recommends:
+### 2. Durable confirmation workbench path
 
-- **Workbench product with internal agent orchestration** as the current best path
-- preserving the agent/runtime constraints that currently protect generation quality
-- building explicit product layers around the existing protocol:
-  - Product Shell
-  - Workflow State
-  - Orchestrator
-  - Adapter
+The implemented workbench slice covers the first user-facing gate:
 
-### Current alignment
+```text
+import source
+  -> prepare Eight Confirmations
+  -> render questions
+  -> validate complete answers
+  -> POST JSON to the workbench route
+  -> persist project + artifacts + checkpoint
+  -> fresh GET shows the locked state
+  -> expose the next gated strategist action
+```
 
-The current codebase is **aligned with that direction at the boundary/contract level**:
+Relevant surfaces:
 
-- a dedicated `productization/` directory exists
-- product-facing state is modeled explicitly
-- orchestrator/action boundaries exist
-- adapter boundaries exist
-- UI-facing view models exist
-- product tests cover state transitions and contract richness
+- `productization/app/project-workbench-page.ts`
+- `productization/app/render-project-workbench-shell.ts`
+- `productization/app/project-workbench-http-route.ts`
+- `productization/backend/actions/submit-confirmations.ts`
+- `productization/backend/services/project-view-service.ts`
 
-### Current gap
+The shell serializes form answers as JSON and submits them to the route. The route rejects malformed/incomplete input, requires persistence capabilities before returning success, persists the transition, and re-renders through the same repositories. A successful response is therefore not merely an in-memory projection.
 
-The codebase is **not yet aligned at the actual user-surface level**:
+### 3. Reproducible verification fixture
 
-- there is no fully realized workbench UI runtime here yet
-- the current `productization/` layer is still mostly a skeleton of contracts, orchestrators, stubs, and tests
-- the structured product shell described by the architecture document is not yet concretely implemented as a complete app flow
+Runtime-backed workbench tests use the repository-contained fixture at:
 
----
+```text
+productization/test-fixtures/runtime-workspace/
+```
 
-## Status relative to the original Slice 1 document
+The verification suite no longer depends on a manually retained `/tmp/ppt-downstream-svg-probe` workspace.
 
-The Slice 1 implementation spec (`pptmaster-productization-slice-1-confirmation-lock-spec.md`) defines the first vertical slice very narrowly:
+### 4. Gate-honest presentation
 
-- create project
-- import source(s)
-- prepare confirmation recommendations
-- submit Eight Confirmations
-- reach `confirmation_locked`
+The workbench does not claim that Strategist, generation, preview, or export has run merely because confirmations were submitted. Later stages remain represented through the project/artifact/checkpoint state and their runtime bridge adapters.
 
-It also explicitly says Slice 1 should **not** include:
+The type-safe contracts include explicit terminal failure handling so the UI can present a recovery state without unlocking later actions.
 
-- spec generation
-- preview
-- revision
-- export
+## Verification evidence
 
-### Current reality
+The following are checked at the current revision:
 
-The implementation has already moved beyond that boundary.
+- TypeScript repository check: `npx tsc -p tsconfig.json --noEmit`.
+- Mainline bridge and workbench checks: `npm run productization:mainline`.
+- Direct inventory: all `productization/tests/*.test.ts` files (45 pass / 0 fail).
+- Durable confirmation proof: `project-workbench-confirmation-submit-post.test.ts` performs POST then fresh GET on the same repositories.
+- Shell/route integration proof: `project-workbench-shell-confirmation-submission-integration.test.ts`.
+- Browser-visible retry/error behavior: `project-workbench-confirmation-submit-error-ui.test.ts`.
+- Repository fixture workbench proof: `project-workbench-ui-slice.test.ts`.
 
-Evidence in the current code:
+The original audit report, `docs/productization-ppt-master-code-audit-2026-07-10.md`, is retained as a point-in-time finding. Its former fixture, TypeScript, form-submission, and persistence blockers were remediated in subsequent workbench and type-safety commits. It must not be read as the live status source without this update.
 
-- `productization/backend/state/schema.ts` includes statuses beyond Slice 1:
-  - `spec_ready`
-  - `generation_in_progress`
-  - `preview_available`
-  - `revision_requested`
-  - `export_ready`
-  - `failed_recoverable`
-- `productization/backend/actions/submit-confirmations.ts` currently advances to `spec_ready`, not `confirmation_locked`
-- `productization/backend/orchestrator/phase-runner.ts` already contains shell/stub flows for:
-  - start generation
-  - preview sync
-  - request revision
-  - resume generation
-  - export PPTX
+## Not implemented / not claimed
 
-### Meaning
+This repository does **not** yet prove or provide:
 
-So in implementation terms, the codebase is **past the original Slice 1 scope**.
+1. A deployed application host, production server lifecycle, or production dependency injection.
+2. Identity, authorization, tenant isolation, CSRF/origin protection, rate limiting, and external error sanitization for an exposed write route.
+3. A concrete production database/filesystem persistence implementation, migrations, retention policy, or operational recovery process.
+4. A complete dashboard, artifact browser/download surface, SVG editor embedding, responsive/accessibility review, or full design-system coverage.
+5. Production deployment evidence for every PPT Master role adapter with real customer sources and generated PPTX artifacts.
 
-However, that does **not** mean the product shell is complete. It means the project advanced its **backend productization shell** further than the first spec originally described.
+These omissions mean the workbench slice is not a production-service claim.
 
----
+## Required next increment
 
-## What is actually implemented now
+The next implementation must follow the PPT Master order and add **negative gate evidence first**:
 
-### 1. Productization state machine
+```text
+locked confirmations
+  -> strategist runtime verification
+  -> explicit spec_ready gate
+  -> generation eligibility
+  -> workspace-derived preview/export availability
+```
 
-The current productization layer models a project lifecycle that extends through:
-
-- `draft`
-- `sources_ready`
-- `confirmation_pending`
-- `confirmation_locked`
-- `spec_ready`
-- `generation_in_progress`
-- `preview_available`
-- `revision_requested`
-- `export_ready`
-- `failed_recoverable`
-
-This means the productization effort already has a broader workflow contract than the original first-slice document.
-
-### 2. Product actions and orchestration shell
-
-The current code defines/stubs product-facing actions and orchestration for:
-
-- project creation
-- source import
-- confirmation preparation
-- confirmation submission
-- generation start
-- generation resume
-- revision request
-- preview sync
-- export
-
-This is valuable progress because it freezes the outer product contract before the final UI shell exists.
-
-### 3. View models and artifact richness
-
-The current productization layer already exposes product-facing shapes such as:
-
-- `ProjectViewModel`
-- `PreviewViewModel`
-- `ExportViewModel`
-- confirmation view models
-
-and includes richer artifact/checkpoint metadata intended for a future workbench UI.
-
-### 4. Tests
-
-The `productization/tests/` directory already verifies several vertical slices and contract behaviors, including:
-
-- confirmation lock flow
-- checkpoint persistence
-- generation/preview shell
-- revision/export shell
-- recoverable failure continuity
-
-This strongly suggests the current phase is **contract-and-orchestration stabilization**, not “blank slate productization.”
-
----
-
-## What is not implemented yet
-
-Despite the backend/product-shell progress, the following are still missing or only minimally present:
-
-### 1. Real workbench UI shell
-
-The architecture document's preferred product surface is a structured workbench with visible steps such as:
-
-1. create project
-2. upload material / input topic
-3. confirm outline and design recommendations
-4. confirm Eight Confirmations
-5. generate / preview
-6. revise/regenerate
-7. export
-
-That full user-facing shell is **not actually implemented here yet**.
-
-### 2. Concrete app/runtime wiring
-
-The current `productization/` tree does not yet present itself as a complete front-end application/runtime with the above user flow fully wired and shippable.
-
-### 3. Rich visual product surface
-
-This is especially important given the product goal: the current productization layer still does not yet guarantee a UI experience that reflects PPTMASTER-quality output and control. The repo has state and artifacts, but not yet the rich, visual, user-facing workbench that makes those states useful as a product.
-
----
-
-## Practical current phase label
-
-The most accurate label for the current phase is:
-
-> **Backend-first productization shell through preview/export contracts; workbench UI still pending.**
-
-If a slightly longer label is needed:
-
-> **Productization has progressed from Slice 1 into multi-slice backend/orchestrator skeleton work, but has not yet crossed into a fully realized workbench UI implementation phase.**
-
----
-
-## Why this matters for next steps
-
-Without this status alignment, future work can drift in two bad directions:
-
-### Risk A: pretending the product shell already exists
-
-This leads to vague claims like “productization is basically done” when the current repo still lacks the real user-facing workbench.
-
-### Risk B: pretending nothing exists and restarting from scratch
-
-This ignores that the repo already has:
-
-- product state modeling
-- action contracts
-- adapter/orchestrator boundaries
-- checkpoint flows
-- artifact-rich view models
-- tests for multiple slices
-
-The right next step is neither of those extremes.
-
----
-
-## Recommended immediate next step
-
-The next high-value step should be:
-
-> **Implement the smallest real workbench UI slice that consumes the existing productization contracts instead of inventing new backend abstractions.**
-
-Recommended target:
-
-- one minimal but real user-facing workbench flow over existing view models/actions
-- use current checkpoint/timeline/artifact contracts as-is where possible
-- avoid broad backend rewrites unless the UI exposes a contract gap
-
-### Suggested first UI slice
-
-The smallest useful product-shell implementation would likely cover:
-
-- project overview/status timeline
-- source import status
-- confirmation recommendation display
-- confirmation submission UI
-- checkpoint/status visibility
-- preview/export summary cards (even if final rendering is still partial)
-
-This would move the project from “backend-first shell” into the first genuinely product-facing workbench milestone.
-
----
+Before a generation or delivery action is exposed, tests must prove that failed, pending, planned, stale, superseded, or cross-run artifacts cannot unlock it. The workbench must explain the block truthfully and must not fabricate a completion state.
 
 ## Bottom line
 
-> **According to the project documents, the intended direction is a workbench product with internal agent orchestration. According to the current code, we have already built a meaningful backend productization shell beyond the original Slice 1 boundary. According to the current repository surface, we still have not yet built the actual workbench UI that would make that shell a real product.**
+The productization area now has a verified runtime-backed confirmation workbench slice with durable locking and truthful next-step projection.
+
+It is not a complete production application. Future work must extend one adjacent PPT Master gate at a time, retain runtime/adaptor truth sources, add negative blocking tests before positive UI actions, and preserve the authoritative PPT Master pipeline.

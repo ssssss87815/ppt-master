@@ -1,260 +1,142 @@
-# PPTMASTER Productization —— 当前状态说明
-
-[中文](./zh/productization-current-status.md) | [English](./productization-current-status.md)
+[中文](./productization-current-status.md) | [English](../productization-current-status.md)
 
 ---
 
-## 文档目的
+# PPTMASTER 产品化 — 当前状态
 
-这份说明用于记录：**当前 productization 实际走到了哪里**，以及它和架构锚点文档、最初的 Slice 1 / MVP skeleton 文档相比处于什么位置。
+> **状态：** 已实现并验证一个以运行时为依据的 Project Workbench 切片，覆盖“锁定确认项”门禁。它是 PPT Master 之上的集成层，**不是**替代演示文稿生成流程的第二套工作流，也不是完整的生产应用。
+>
+> **更新：** 2026-07-10
+>
+> **当前验证基线：**
+> - `npx tsc -p tsconfig.json --noEmit` — 通过
+> - `npm run productization:mainline` — 通过
+> - 直接运行 `productization/tests/*.test.ts` — 46 通过 / 0 失败
 
-它不是新的架构提案，而是一份状态对齐说明，避免后续实现工作混淆以下三件事：
+## 目的
 
-- 架构意图
-- 后端契约/编排进度
-- 真实产品壳/UI 进度
+本文记录 `productization/` 的实际状态，避免后续工作：
 
----
+- 重建已经交付的 Workbench 确认项切片；
+- 宣称此仓库已有生产部署、完整安全边界或具体持久化实现；
+- 以 UI 状态或伪造产物绕过 PPT Master 工作流；
+- 将仓库内测试 fixture 当成生产应用宿主的证据。
 
-## 一句话结论
+权威工作流是 `skills/ppt-master/SKILL.md`：
 
-> **PPTMASTER 的 productization 在后端契约 / orchestrator 层面已经超过最初的 Slice 1 边界，但真正的 workbench UI shell 还没有落地。**
+```text
+源材料导入
+  -> 八项确认（Eight Confirmations）
+  -> Strategist 运行时验证
+  -> spec lock / spec_ready 门禁
+  -> generation
+  -> 基于 workspace 的 preview
+  -> 导出 PPTX
+```
 
-更具体一点说：
+产品化层只能投影、持久化和约束这条流程；不得发明第二条流程、提前把后续阶段标记为完成、或在 UI 契约中自行拼装 workspace 路径。
 
-> **系统已经具备了贯穿 preview / revision / export shell 阶段的多切片 productization 状态、动作、checkpoint、artifact ref 和 view model，但用户真正能操作的 workbench 产品界面仍基本缺位。**
+## 已实现并已验证的内容
 
----
+### 1. 状态、动作与运行时边界
 
-## 相对于架构文档的当前位置
+仓库已具备：
 
-架构锚点文档（`productization-architecture.md`）推荐的方向是：
+- project、artifact、checkpoint 与 workspace mapping 契约；
+- source import 与 confirmation preparation 动作；
+- 显式项目状态和受保护的阶段迁移；
+- Strategist、generation、preview、export 的运行时桥接适配器；
+- 从 project 状态投影 view model，而不是从 UI 文案推断工作流状态。
 
-- 当前最佳路径是 **Workbench product with internal agent orchestration**
-- 保留当前能保证产出质量的 agent/runtime 约束
-- 在现有协议外面建立明确的产品层：
-  - Product Shell
-  - Workflow State
-  - Orchestrator
-  - Adapter
+workspace mapping 仍归 backend/adapter 负责。UI 契约消费元数据、项目状态、checkpoint 和 artifact，不能自行构造仓库路径。
 
-### 当前对齐情况
+### 2. 可持久化的确认项 Workbench 路径
 
-当前代码库在**边界/契约层面**已经基本对齐这一路线：
+已实现的 Workbench 切片覆盖首个用户可操作门禁：
 
-- 已经存在独立的 `productization/` 目录
-- product-facing state 已被显式建模
-- orchestrator / action 边界已存在
-- adapter 边界已存在
-- UI-facing 的 view model 已存在
-- 已有测试覆盖状态流转与契约丰富度
+```text
+导入源材料
+  -> 准备八项确认
+  -> 渲染问题
+  -> 校验答案完整性
+  -> 向 Workbench route POST JSON
+  -> 持久化 project + artifact + checkpoint
+  -> fresh GET 展示已锁定状态
+  -> 暴露下一步受门禁保护的 Strategist 动作
+```
 
-### 当前缺口
+相关实现：
 
-但在**真实用户界面层面**还没有对齐到位：
+- `productization/app/project-workbench-page.ts`
+- `productization/app/render-project-workbench-shell.ts`
+- `productization/app/project-workbench-http-route.ts`
+- `productization/app/project-workbench-node-server.ts`
+- `productization/backend/actions/submit-confirmations.ts`
+- `productization/backend/services/project-view-service.ts`
 
-- 这里还没有一个真正完成的 workbench UI runtime
-- 当前 `productization/` 仍主要是 contracts、orchestrators、stubs 和 tests 的骨架
-- 架构文档里描述的结构化产品壳，还没有作为完整 app flow 落地
+Shell 会将表单答案序列化为 JSON 并提交给 route。Route 会拒绝错误格式或不完整的输入；只有具备持久化能力时才可返回成功；成功后会持久化迁移并通过同一组 repositories 重新渲染。因此成功响应并非仅内存中的临时投影。
 
----
+### 3. 可复现的运行时 fixture 与 HTTP 边界证明
 
-## 相对于最初 Slice 1 文档的当前位置
+运行时 Workbench 测试使用仓库内 fixture：
 
-Slice 1 实现文档（`pptmaster-productization-slice-1-confirmation-lock-spec.md`）对第一条 vertical slice 的定义非常窄：
+```text
+productization/test-fixtures/runtime-workspace/
+```
 
-- create project
-- import source(s)
-- prepare confirmation recommendations
-- submit Eight Confirmations
-- 到达 `confirmation_locked`
+验证不再依赖人工保留的 `/tmp/ppt-downstream-svg-probe`。
 
-并且它明确说 Slice 1 **不包含**：
+此外已有 `project-workbench-node-server.ts` 将 route 适配为最小 Node HTTP server，并验证真实 localhost HTTP 请求的 GET、POST、404 与 405 语义。它不是生产应用服务器，但证明了 Workbench route 可在真实网络边界被承载。
 
-- spec generation
-- preview
-- revision
-- export
+### 4. 诚实的阶段展示
 
-### 当前实际情况
+Workbench 不会因确认项已提交就宣称 Strategist、generation、preview 或 export 已执行。后续阶段仍然通过 project/artifact/checkpoint 状态和对应运行时 bridge adapter 表示。
 
-实现已经明显超出了这个边界。
+类型安全契约包含明确的 terminal failure 处理，因此 UI 能展示恢复状态而不会解锁后续动作。
 
-当前代码中的证据：
+## 验证证据
 
-- `productization/backend/state/schema.ts` 已包含超出 Slice 1 的状态：
-  - `spec_ready`
-  - `generation_in_progress`
-  - `preview_available`
-  - `revision_requested`
-  - `export_ready`
-  - `failed_recoverable`
-- `productization/backend/actions/submit-confirmations.ts` 当前会直接推进到 `spec_ready`，而不是停在 `confirmation_locked`
-- `productization/backend/orchestrator/phase-runner.ts` 已经有以下 shell/stub 流程：
-  - start generation
-  - preview sync
-  - request revision
-  - resume generation
-  - export PPTX
+当前修订已检查：
 
-### 这意味着什么
+- 仓库 TypeScript：`npx tsc -p tsconfig.json --noEmit`。
+- 主线 bridge 与 Workbench：`npm run productization:mainline`。
+- 直接 inventory：全部 `productization/tests/*.test.ts`（46 通过 / 0 失败）。
+- 可持久化确认项证明：`project-workbench-confirmation-submit-post.test.ts` 在同一组 repositories 上执行 POST 后 fresh GET。
+- Shell/route 集成：`project-workbench-shell-confirmation-submission-integration.test.ts`。
+- 浏览器可见的失败重试行为：`project-workbench-confirmation-submit-error-ui.test.ts`。
+- 仓库 fixture 的 Workbench 覆盖：`project-workbench-ui-slice.test.ts`。
+- 真实 Node HTTP 边界：`project-workbench-node-server.test.ts`。
 
-所以从实现角度看，代码库已经**超出了最初 Slice 1 的范围**。
+审计报告 `docs/productization-ppt-master-code-audit-2026-07-10.md` 被保留为当时的审计快照。后续 Workbench 与 type-safety 提交已经修复其中 fixture、TypeScript、表单提交和持久化相关 blocker；它不能脱离本状态文档被当作当前状态来源。
 
-但这**不等于**产品壳已经完成。它只说明：项目已经把**后端 productization shell**推进到了比第一份 spec 更靠后的地方。
+## 尚未实现 / 不作宣称的内容
 
----
+本仓库尚未证明或提供：
 
-## 当前实际上已经实现了什么
+1. 已部署应用宿主、生产 server 生命周期或生产依赖注入。
+2. 面向外部写 route 的身份认证、授权、租户隔离、CSRF/origin 保护、限流和对外错误脱敏。
+3. 具体生产数据库/文件系统持久化实现、迁移、保留策略或运维恢复流程。
+4. 完整 dashboard、artifact 浏览/下载界面、SVG 编辑器嵌入、全状态响应式/无障碍审阅或设计系统覆盖。
+5. 各 PPT Master role adapter 在真实客户源材料和生成 PPTX 上的生产部署证据。
 
-### 1）Productization 状态机
+因此，这个 Workbench 切片不是“生产服务已经完成”的声明。
 
-当前 productization 层已经建模了一条扩展到以下阶段的项目生命周期：
+## 必须遵守的下一增量
 
-- `draft`
-- `sources_ready`
-- `confirmation_pending`
-- `confirmation_locked`
-- `spec_ready`
-- `generation_in_progress`
-- `preview_available`
-- `revision_requested`
-- `export_ready`
-- `failed_recoverable`
+下一项实现必须遵循 PPT Master 顺序，并且**先增加反向（negative）门禁证据**：
 
-这说明 productization 已经具备了比最初第一阶段文档更宽的 workflow contract。
+```text
+locked confirmations
+  -> Strategist runtime verification
+  -> 明确的 spec_ready 门禁
+  -> generation 可用性
+  -> 基于 workspace 的 preview/export 可用性
+```
 
-### 2）Product action 与 orchestration shell
+在暴露 generation 或 delivery 动作之前，测试必须证明 failed、pending、planned、stale、superseded 或 cross-run artifact 不能解锁它。Workbench 必须如实解释阻塞原因，不能伪造完成状态。
 
-当前代码已经定义/预留了以下 product-facing actions 与 orchestration：
+## 结论
 
-- project creation
-- source import
-- confirmation preparation
-- confirmation submission
-- generation start
-- generation resume
-- revision request
-- preview sync
-- export
+产品化区域现在已有一个经过验证、以运行时为依据的确认项 Workbench 切片：从源材料派生确认项、用户提交答案、持久化锁定确认项，并如实投影下一步。
 
-这一步很有价值，因为它先冻结了产品外层契约，即便最终 UI 壳还没有出现。
-
-### 3）View model 与 artifact richness
-
-当前 productization 层已经提供了面向产品层的形状，例如：
-
-- `ProjectViewModel`
-- `PreviewViewModel`
-- `ExportViewModel`
-- confirmation view models
-
-并且已经携带更丰富的 artifact/checkpoint metadata，目的是给未来的 workbench UI 使用。
-
-### 4）测试
-
-`productization/tests/` 已经验证了多条 vertical slice 和契约行为，例如：
-
-- confirmation lock flow
-- checkpoint persistence
-- generation/preview shell
-- revision/export shell
-- recoverable failure continuity
-
-这强烈说明当前阶段已经不是“productization 还没开始”，而是**contract-and-orchestration stabilization**。
-
----
-
-## 还没有实现的东西
-
-尽管后端/product-shell 已有明显进展，下面这些仍然缺失或只存在很薄的一层：
-
-### 1）真正的 workbench UI shell
-
-架构文档推荐的产品表面是一个结构化 workbench，大致步骤是：
-
-1. create project
-2. upload material / input topic
-3. confirm outline and design recommendations
-4. confirm Eight Confirmations
-5. generate / preview
-6. revise/regenerate
-7. export
-
-但这个完整的用户可见壳层，**现在并没有真正实现出来**。
-
-### 2）具体的 app/runtime wiring
-
-当前 `productization/` 目录还不能算是一个完整前端应用/runtime，无法把上面的用户流程完整串起来并作为可交付产品直接运行。
-
-### 3）足够丰富的视觉产品表面
-
-这点尤其重要，因为产品目标本身就是高质量 PPT 产出：当前 productization 层虽然已经有状态与 artifacts，但还没有一个足够“像产品”的 rich, visual workbench，去把这些状态变成真正有价值的用户体验。
-
----
-
-## 现在这个阶段最准确的命名
-
-最准确的阶段命名是：
-
-> **Backend-first productization shell through preview/export contracts; workbench UI still pending.**
-
-中文可以更直白地说：
-
-> **产品化已经从最初的 Slice 1 进入多切片的后端/编排骨架阶段，但还没有跨入完整 workbench UI 的实现阶段。**
-
----
-
-## 为什么这份状态对齐很重要
-
-如果没有这份状态对齐，后续工作很容易朝两个错误方向漂移：
-
-### 风险 A：误以为 product shell 已经存在
-
-这会导致类似“productization 基本做完了”的误判，但其实当前 repo 仍缺少真正的 workbench 产品界面。
-
-### 风险 B：误以为什么都还没有，于是从零重来
-
-这又会忽略当前 repo 已经拥有的：
-
-- product state modeling
-- action contracts
-- adapter/orchestrator boundaries
-- checkpoint flows
-- artifact-rich view models
-- 多条 slice 的 tests
-
-正确的下一步不是这两个极端中的任意一个。
-
----
-
-## 建议的下一步
-
-下一步最值得做的事情应该是：
-
-> **实现最小但真实可用的 workbench UI slice，并直接消费现有 productization contracts，而不是再发明一套新的后端抽象。**
-
-建议目标：
-
-- 先做一个最小但真实的 user-facing workbench flow
-- 尽量直接复用现有 checkpoint/timeline/artifact contracts
-- 只有当 UI 暴露出真实契约缺口时，才回头修改 backend
-
-### 建议的第一个 UI slice
-
-最小可用的产品壳实现建议至少覆盖：
-
-- project overview/status timeline
-- source import status
-- confirmation recommendation display
-- confirmation submission UI
-- checkpoint/status visibility
-- preview/export summary cards（即便最终渲染仍是部分实现）
-
-这样才能把项目从“backend-first shell”真正推进到第一个有产品意义的 workbench milestone。
-
----
-
-## Bottom line
-
-> **按项目文档，目标方向是“Workbench product with internal agent orchestration”。按当前代码，后端 productization shell 已经明显超过最初的 Slice 1 边界。按当前 repo 的表面状态，我们还没有真正做出能把这套 shell 变成产品的 workbench UI。**
+它不是完整的生产应用。后续必须每次只扩展一个相邻 PPT Master 门禁，保留运行时/adapter 真相来源，在展示正向 UI 动作之前先增加反向阻塞测试，并始终维护权威 PPT Master 管线。

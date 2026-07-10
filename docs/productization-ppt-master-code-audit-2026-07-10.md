@@ -1,5 +1,9 @@
 # PPT Master Productization Code Audit — 2026-07-10
 
+> **Point-in-time notice (updated 2026-07-10):** This report records the audit evidence collected before the remediation commits `1a3a4b4` and `4489788`. Its blocker list is retained for traceability, but is not the live implementation status. The live status is `docs/productization-current-status.md`.
+>
+> Remediated after this audit: the runtime fixture is repository-contained; the workbench form performs JSON POST with retry/error behavior; the route persists project/artifact/checkpoint changes and is proven by POST-then-fresh-GET; the TypeScript gate and full direct productization test inventory are green. Production hosting, security, and concrete production persistence remain explicitly unverified/not claimed.
+
 ## Scope and standard
 
 This audit covers the current workspace change surface at audit time:
