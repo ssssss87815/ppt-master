@@ -90,12 +90,13 @@ def write_image_manifest(project_path: Path, exports_dir: Path, generation_manif
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if len(argv) != 1:
-        return fail('usage: productization_export_shim.py <project_path>')
+    if len(argv) not in (1, 2):
+        return fail('usage: productization_export_shim.py <project_path> [stage_dir]')
 
     project_path = Path(argv[0]).resolve()
     if not project_path.exists():
         return fail(f'project path does not exist: {project_path}')
+    stage_dir = Path(argv[1]).resolve() if len(argv) == 2 else None
 
     svg_dir = project_path / 'svg_output'
     if not svg_dir.exists() or not any(svg_dir.glob('*.svg')):
@@ -105,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     if not notes_dir.exists():
         return fail(f'notes directory missing: {notes_dir}')
 
-    exports_dir = project_path / 'exports'
+    exports_dir = stage_dir if stage_dir else project_path / 'exports'
     exports_dir.mkdir(parents=True, exist_ok=True)
     generation_manifest = read_generation_manifest(project_path)
 
@@ -114,22 +115,26 @@ def main(argv: list[str] | None = None) -> int:
         check=True,
     )
 
-    pptx_files = sorted(exports_dir.glob('*.pptx'), key=lambda item: item.stat().st_mtime, reverse=True)
+    workspace_exports_dir = project_path / 'exports'
+    pptx_files = sorted(workspace_exports_dir.glob('*.pptx'), key=lambda item: item.stat().st_mtime, reverse=True)
     if not pptx_files:
-        return fail(f'no pptx produced under: {exports_dir}')
+        return fail(f'no pptx produced under: {workspace_exports_dir}')
 
-    latest_pptx = pptx_files[0]
+    source_pptx = pptx_files[0]
+    latest_pptx = exports_dir / source_pptx.name
+    if latest_pptx != source_pptx:
+        latest_pptx.write_bytes(source_pptx.read_bytes())
     project_name = latest_pptx.stem
-    write_markdown_companion(project_path, exports_dir, project_name, generation_manifest)
-    write_image_manifest(project_path, exports_dir, generation_manifest)
+    markdown_companion = write_markdown_companion(project_path, exports_dir, project_name, generation_manifest)
+    image_manifest = write_image_manifest(project_path, exports_dir, generation_manifest)
 
     print(
         json.dumps(
             {
                 'project_path': str(project_path),
                 'pptx_path': str(latest_pptx),
-                'markdown_companion': str(exports_dir / f'{project_name}.md'),
-                'image_manifest': str(exports_dir / f'{project_path.name}_files' / 'image_manifest.json'),
+                'markdown_companion': str(markdown_companion),
+                'image_manifest': str(image_manifest),
                 'status': 'exported',
             },
             ensure_ascii=False,

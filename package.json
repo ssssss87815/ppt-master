@@ -22,6 +22,7 @@
     "runtime:generation-bridge": "tsx productization/tests/generation-runtime-bridge.test.ts",
     "runtime:preview-bridge": "tsx productization/tests/preview-runtime-bridge.test.ts",
     "runtime:export-bridge": "tsx productization/tests/export-runtime-bridge.test.ts",
+    "runtime:staged-export-bridge": "tsx productization/tests/staged-export-bridge.test.ts",
     "runtime:preview-export-richness": "tsx productization/tests/preview-export-artifact-richness.test.ts",
     "runtime:phase-runner-preview": "tsx productization/tests/phase-runner-preview.test.ts",
     "runtime:project-view": "tsx productization/tests/project-view-runtime-contract.test.ts",
@@ -41,7 +42,7 @@
     "runtime:workbench-http-route": "tsx productization/tests/project-workbench-http-route.test.ts",
     "runtime:workbench-node-server": "tsx productization/tests/project-workbench-node-server.test.ts",
     "runtime:workbench-availability-gate": "tsx productization/tests/workbench-runtime-availability-gate.test.ts",
-    "productization:mainline": "npm run runtime:generation-bridge && npm run runtime:preview-bridge && npm run runtime:export-bridge && npm run runtime:preview-export-richness && npm run runtime:phase-runner-preview && npm run runtime:project-view && npm run runtime:workflow-local && npm run runtime:revision-export && npm run runtime:recoverable-failure && npm run runtime:resume-continuity && npm run runtime:shell-projection && npm run runtime:checkpoint-view && npm run runtime:workbench-ui && npm run runtime:workbench-confirmation-ui && npm run runtime:workbench-confirmation-submit-error-ui && npm run runtime:workbench-confirmation-integration && npm run runtime:workbench-page && npm run runtime:workbench-artifact-actions && npm run runtime:app-shell-render && npm run runtime:workbench-http-route && npm run runtime:workbench-node-server && npm run runtime:workbench-availability-gate && npm run runtime:workbench-next-action-ui && npm run runtime:workbench-primary-timeline-focus",
+    "productization:mainline": "npm run runtime:generation-bridge && npm run runtime:preview-bridge && npm run runtime:export-bridge && npm run runtime:staged-export-bridge && npm run runtime:preview-export-richness && npm run runtime:phase-runner-preview && npm run runtime:project-view && npm run runtime:workflow-local && npm run runtime:revision-export && npm run runtime:recoverable-failure && npm run runtime:resume-continuity && npm run runtime:shell-projection && npm run runtime:checkpoint-view && npm run runtime:workbench-ui && npm run runtime:workbench-confirmation-ui && npm run runtime:workbench-confirmation-submit-error-ui && npm run runtime:workbench-confirmation-integration && npm run runtime:workbench-page && npm run runtime:workbench-artifact-actions && npm run runtime:app-shell-render && npm run runtime:workbench-http-route && npm run runtime:workbench-node-server && npm run runtime:workbench-availability-gate && npm run runtime:workbench-next-action-ui && npm run runtime:workbench-primary-timeline-focus",
     "runtime:workbench-next-action-ui": "tsx productization/tests/project-workbench-next-action-ui.test.ts",
     "runtime:workbench-primary-timeline-focus": "tsx productization/tests/project-workbench-primary-timeline-focus.test.ts"
   },
