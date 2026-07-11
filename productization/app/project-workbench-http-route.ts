@@ -128,6 +128,13 @@ async function handleProjectActionPost(
     return handleStartGenerationSubmit(dependencies, projectId);
   }
 
+  if (action === 'export_pptx') {
+    if (!dependencies.exportPptx) {
+      return textResponse(400, 'Unsupported action: export_pptx');
+    }
+    return handleExportPptxSubmit(dependencies, projectId);
+  }
+
   return textResponse(400, `Unsupported action: ${action}`);
 }
 
@@ -195,6 +202,53 @@ async function handleConfirmationsSubmit(
     await dependencies.checkpoints.create(result.checkpoint);
   } catch {
     return htmlFailureResponse('Submission unavailable', 'Could not persist confirmation locking.');
+  }
+
+  const page = await renderProjectWorkbenchPage(dependencies, projectId);
+  return {
+    status: page.status,
+    headers: { 'content-type': page.contentType },
+    body: page.body,
+  };
+}
+
+async function handleExportPptxSubmit(
+  dependencies: ProjectWorkbenchPageDependencies,
+  projectId: string,
+): Promise<ProjectWorkbenchHttpResponse> {
+  if (!dependencies.exportPptx) {
+    return htmlFailureResponse('Export unavailable', 'No verified export runtime is configured for this workbench.');
+  }
+
+  let project: ProjectRecord | null;
+  let artifacts: ProductArtifactRef[];
+  let checkpoints: WorkflowCheckpoint[];
+  try {
+    [project, artifacts, checkpoints] = await Promise.all([
+      dependencies.projects.getById(projectId),
+      dependencies.artifacts.listByProjectId(projectId),
+      dependencies.checkpoints.listByProjectId(projectId),
+    ]);
+  } catch {
+    return htmlFailureResponse('Export unavailable', 'Could not load the verified preview evidence.');
+  }
+
+  if (!project) {
+    return textResponse(404, 'Project not found');
+  }
+
+  if (project.status !== 'preview_available') {
+    return textResponse(400, 'Invalid transition: export_pptx requires preview_available status');
+  }
+
+  try {
+    const result = await dependencies.exportPptx({ project, artifacts, checkpoints });
+    if ((result.kind !== 'delivered' && result.kind !== 'completed') || !result.primaryArtifactId) {
+      return htmlFailureResponse('Export unavailable', 'Verified export returned no durable delivery.');
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return htmlFailureResponse('Export unavailable', `Verified export did not commit: ${message}`);
   }
 
   const page = await renderProjectWorkbenchPage(dependencies, projectId);

@@ -157,7 +157,6 @@ export type ProjectViewModel = {
   };
   workbench: {
     timeline?: ProjectTimelineItemViewModel[];
-    currentTimelineItem?: ProjectTimelineItemViewModel;
     strategistHandoff?: StrategistHandoffViewModel;
     sections: ProjectWorkbenchSectionViewModel[];
     confirmationState: {
@@ -169,6 +168,8 @@ export type ProjectViewModel = {
       displayStatus: 'not_ready' | 'ready_for_review' | 'locked' | 'completed';
     };
     confirmationSubmission?: ConfirmationSubmissionViewModel;
+    /** True only when this request is backed by the server-owned durable export adapter. */
+    exportAvailable?: boolean;
     summaryCards: Array<{
       key: 'sources' | 'confirmations' | 'preview' | 'export' | 'artifacts' | 'strategist';
       title: string;

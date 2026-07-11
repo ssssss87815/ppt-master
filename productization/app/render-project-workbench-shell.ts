@@ -123,13 +123,19 @@ function formatActionOwner(action: string): string {
   }
 }
 
-function isActionableAction(action: string): boolean {
-  return action === 'submit_confirmations' || action === 'start_generation';
+function isActionableAction(project: ProjectViewModel, action: string): boolean {
+  return action === 'submit_confirmations'
+    || action === 'start_generation'
+    || (action === 'export_pptx' && project.workbench.exportAvailable === true);
 }
 
 function actionAvailabilityMessage(project: ProjectViewModel, action: string): string {
-  if (action !== 'start_generation') {
+  if (action === 'export_pptx') {
     return 'Runtime action unavailable in this read-only workbench.';
+  }
+
+  if (action !== 'start_generation') {
+    return 'This action runs through the verified server-side runtime bridge.';
   }
 
   const strategistHandoff = project.workbench.strategistHandoff;
@@ -221,7 +227,7 @@ function actionableRows(project: ProjectViewModel): string {
             ${renderMetadataRow('Current phase', project.currentPhase.title)}
             ${renderMetadataRow('Primary', isPrimary ? 'yes' : 'no')}
           </dl>
-          ${isActionableAction(action)
+          ${isActionableAction(project, action)
             ? `<button type="button" class="next-action-button" data-action-code="${escapeHtml(action)}" data-project-id="${escapeHtml(project.projectId)}">${escapeHtml(formatActionLabel(action))}</button>`
             : `<p class="action-availability">${escapeHtml(actionAvailabilityMessage(project, action))}</p>`}
         </article>`;

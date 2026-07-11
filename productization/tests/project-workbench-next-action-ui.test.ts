@@ -29,14 +29,16 @@ const project = {
       verifiedArtifactCount: 2,
       pendingArtifactCount: 0,
       generationGateCopy: 'Generation handoff verified and ready to start page generation.',
-      artifacts: [],
     },
     confirmationState: {
+      hasRecommendations: true,
+      hasConfirmationResult: false,
       recommendationCount: 0,
       answeredCount: 0,
       locked: false,
       displayStatus: 'ready_for_review',
     },
+    exportAvailable: true,
     sections: [],
     summaryCards: [],
   },
@@ -61,8 +63,8 @@ assert.doesNotMatch(
 );
 assert.match(
   html,
-  /<p class="action-availability">Runtime action unavailable in this read-only workbench\.<\/p>/,
-  'other unsupported projected actions should remain honest instead of presenting a dead control',
+  /<button type="button" class="next-action-button" data-action-code="export_pptx" data-project-id="next-action-ui-project">Export Pptx<\/button>/,
+  'verified export should be exposed as an actionable workbench control',
 );
 
 console.log('project workbench next-action UI test: ok');

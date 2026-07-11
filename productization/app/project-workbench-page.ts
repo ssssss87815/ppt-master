@@ -7,10 +7,23 @@ import { toProjectViewModel } from '../backend/services/project-view-service.js'
 import type { ProjectViewModel } from './viewmodels/project-view-model.js';
 import { renderProjectWorkbenchShell } from './render-project-workbench-shell.js';
 
+export type ProjectWorkbenchExportInput = {
+  project: ProjectRecord;
+  artifacts: ProductArtifactRef[];
+  checkpoints: WorkflowCheckpoint[];
+};
+
+export type ProjectWorkbenchExportResult = {
+  kind: 'delivered' | 'completed';
+  primaryArtifactId: string;
+};
+
 export type ProjectWorkbenchPageDependencies = {
   projects: Pick<ProjectRepository, 'getById'> & Partial<Pick<ProjectRepository, 'update'>>;
   artifacts: Pick<ArtifactRepository, 'listByProjectId'> & Partial<Pick<ArtifactRepository, 'createMany'>>;
   checkpoints: Pick<CheckpointRepository, 'listByProjectId' | 'getLatestByProjectId'> & Partial<Pick<CheckpointRepository, 'create'>>;
+  /** Server-owned adapter; it must commit the verified export before returning. */
+  exportPptx?: (input: ProjectWorkbenchExportInput) => Promise<ProjectWorkbenchExportResult>;
   loadRecommendations?: (projectId: string) => Promise<Array<{ key: string; title: string; recommendation: string }>>;
 };
 
@@ -158,6 +171,7 @@ export async function renderProjectWorkbenchPage(
     latestCheckpoint ?? undefined,
     latestStartedCheckpoint,
   ) as unknown as ProjectViewModel;
+  viewModel.workbench.exportAvailable = Boolean(dependencies.exportPptx);
 
   return {
     status: 200,
