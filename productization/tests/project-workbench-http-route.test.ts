@@ -119,6 +119,100 @@ async function main() {
   assert.equal(unsupportedAction.status, 400, 'unsupported POST actions should be rejected honestly');
   assert.match(unsupportedAction.body, /Unsupported action: export_pptx/);
 
+  let exportEligibleProjectWrites = 0;
+  let exportEligibleArtifactWrites = 0;
+  let exportEligibleCheckpointWrites = 0;
+  const exportEligibleProject: ProjectRecord = {
+    ...project,
+    status: 'preview_available',
+    lastRunId: 'pitch-deck-preview-run',
+  };
+  const previewBundle: ProductArtifactRef = {
+    artifactId: 'pitch-deck-preview-bundle',
+    projectId: exportEligibleProject.projectId,
+    kind: 'preview_bundle',
+    scope: 'run',
+    status: 'ready',
+    label: 'Preview bundle',
+    runId: exportEligibleProject.lastRunId,
+    storageKey: 'projects/pitch-deck-route-proof/preview',
+    createdAt: '2026-07-10T10:20:00.000Z',
+    updatedAt: '2026-07-10T10:20:00.000Z',
+  };
+  const previewPage: ProductArtifactRef = {
+    artifactId: 'pitch-deck-preview-page',
+    projectId: exportEligibleProject.projectId,
+    kind: 'preview_page_svg',
+    scope: 'page',
+    status: 'ready',
+    label: 'Preview page',
+    pageKey: 'page-1',
+    runId: exportEligibleProject.lastRunId,
+    storageKey: 'projects/pitch-deck-route-proof/preview/page-1.svg',
+    createdAt: '2026-07-10T10:20:00.000Z',
+    updatedAt: '2026-07-10T10:20:00.000Z',
+  };
+  const previewCheckpoint: WorkflowCheckpoint = {
+    checkpointId: 'pitch-deck-preview-synced',
+    projectId: exportEligibleProject.projectId,
+    stage: 'preview_synced',
+    status: 'completed',
+    statusBefore: 'generation_in_progress',
+    statusAfter: 'preview_available',
+    artifactIds: [previewBundle.artifactId, previewPage.artifactId],
+    createdAt: '2026-07-10T10:20:00.000Z',
+  };
+  const exportEligibleDependencies = {
+    projects: {
+      async getById(projectId: string): Promise<ProjectRecord | null> {
+        return projectId === exportEligibleProject.projectId ? exportEligibleProject : null;
+      },
+      async update(updatedProject: ProjectRecord): Promise<ProjectRecord> {
+        exportEligibleProjectWrites += 1;
+        return updatedProject;
+      },
+    },
+    artifacts: {
+      async listByProjectId(projectId: string): Promise<ProductArtifactRef[]> {
+        return projectId === exportEligibleProject.projectId ? [previewBundle, previewPage] : [];
+      },
+      async createMany(newArtifacts: ProductArtifactRef[]): Promise<ProductArtifactRef[]> {
+        exportEligibleArtifactWrites += 1;
+        return newArtifacts;
+      },
+    },
+    checkpoints: {
+      async getLatestByProjectId(projectId: string): Promise<WorkflowCheckpoint | null> {
+        return projectId === exportEligibleProject.projectId ? previewCheckpoint : null;
+      },
+      async listByProjectId(projectId: string): Promise<WorkflowCheckpoint[]> {
+        return projectId === exportEligibleProject.projectId ? [previewCheckpoint] : [];
+      },
+      async create(checkpoint: WorkflowCheckpoint): Promise<WorkflowCheckpoint> {
+        exportEligibleCheckpointWrites += 1;
+        return checkpoint;
+      },
+    },
+  };
+  const exportEligibleView = await handleProjectWorkbenchHttpRequest(exportEligibleDependencies, {
+    method: 'GET',
+    url: '/projects/pitch%20deck%20%2F%202026',
+  });
+  assert.equal(exportEligibleView.status, 200, 'completed current-run preview evidence should project the adjacent export action');
+  assert.match(exportEligibleView.body, /data-action-code="export_pptx"/, 'the workbench should expose export as the next projected action');
+  assert.match(exportEligibleView.body, /Runtime action unavailable in this read-only workbench\./, 'the workbench must describe export as unavailable rather than fabricate an execution control');
+
+  const rejectedEligibleExport = await handleProjectWorkbenchHttpRequest(exportEligibleDependencies, {
+    method: 'POST',
+    url: '/projects/pitch%20deck%20%2F%202026',
+    body: JSON.stringify({ action: 'export_pptx' }),
+  });
+  assert.equal(rejectedEligibleExport.status, 400, 'runtime-eligible export remains unavailable without a persisted workbench action boundary');
+  assert.match(rejectedEligibleExport.body, /Unsupported action: export_pptx/);
+  assert.equal(exportEligibleProjectWrites, 0, 'rejected export must not update the project');
+  assert.equal(exportEligibleArtifactWrites, 0, 'rejected export must not create artifacts');
+  assert.equal(exportEligibleCheckpointWrites, 0, 'rejected export must not create checkpoints');
+
   let rejectedTransitionUpdates = 0;
   let rejectedTransitionArtifactWrites = 0;
   let rejectedTransitionCheckpointWrites = 0;
