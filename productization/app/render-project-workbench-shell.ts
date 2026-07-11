@@ -124,7 +124,7 @@ function formatActionOwner(action: string): string {
 }
 
 function isActionableAction(action: string): boolean {
-  return action === 'submit_confirmations' || action === 'start_generation';
+  return action === 'submit_confirmations' || action === 'start_generation' || action === 'export_pptx';
 }
 
 function actionAvailabilityMessage(project: ProjectViewModel, action: string): string {
@@ -232,7 +232,6 @@ function actionableRows(project: ProjectViewModel): string {
 function renderHeaderMetadata(project: ProjectViewModel): string {
   const rows = [
     ['Current phase status', project.currentPhase.status],
-    ['Workspace', project.workspacePath],
     ['Last run ID', project.lastRunId],
     ['Last updated', project.lastUpdatedAt],
   ]
@@ -1522,6 +1521,35 @@ export function renderProjectWorkbenchShell(project: ProjectViewModel): string {
       document.addEventListener('click', function (event) {
         const target = event.target;
         if (!(target instanceof Element)) {
+          return;
+        }
+
+        const actionButton = target.closest('.next-action-button[data-action-code][data-project-id]');
+        if (actionButton instanceof HTMLButtonElement) {
+          const action = actionButton.dataset.actionCode;
+          const projectId = actionButton.dataset.projectId;
+          if (!action || !projectId) {
+            return;
+          }
+
+          actionButton.disabled = true;
+          fetch('/projects/' + encodeURIComponent(projectId), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ action: action }),
+          }).then(function (response) {
+            return response.text().then(function (body) {
+              if (!response.ok) {
+                throw new Error(body || 'Workbench action failed.');
+              }
+              document.open();
+              document.write(body);
+              document.close();
+            });
+          }).catch(function (error) {
+            actionButton.disabled = false;
+            window.alert(error instanceof Error ? error.message : 'Workbench action failed.');
+          });
           return;
         }
 

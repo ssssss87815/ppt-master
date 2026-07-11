@@ -61,8 +61,8 @@ assert.doesNotMatch(
 );
 assert.match(
   html,
-  /<p class="action-availability">Runtime action unavailable in this read-only workbench\.<\/p>/,
-  'other unsupported projected actions should remain honest instead of presenting a dead control',
+  /<button[^>]*data-action-code="export_pptx"[^>]*>Export Pptx<\/button>/,
+  'runtime-eligible export should render as an execution control',
 );
 
 console.log('project workbench next-action UI test: ok');

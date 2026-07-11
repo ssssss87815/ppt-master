@@ -563,8 +563,7 @@ function main() {
   assert.match(preparedHtml, /<!doctype html>/i);
   assert.match(preparedHtml, /PPTMASTER App Shell Project/);
   assert.match(preparedHtml, /Current phase: Confirmation status/);
-  assert.match(preparedHtml, /Workspace/);
-  assert.match(preparedHtml, /projects\/pptmaster-app-shell-project/);
+  assert.doesNotMatch(preparedHtml, /<dt>Workspace<\/dt>/, 'the shell must not expose its server workspace metadata');
   assert.match(preparedHtml, /Current phase status/);
   assert.match(preparedHtml, /confirmation_pending/);
   assert.match(preparedHtml, /Last updated/);
@@ -636,7 +635,7 @@ function main() {
   assert.doesNotMatch(preparedHtml, /<li>checkpoint-confirmations-prepared-001<\/li>/, 'checkpoint artifacts list should stay scoped to artifact ids and not repeat the checkpoint id itself');
   assert.match(preparedHtml, /Current phase status/);
   assert.match(preparedHtml, /confirmation_pending/);
-  assert.match(preparedHtml, /Workspace/);
+  assert.doesNotMatch(preparedHtml, /<dt>Workspace<\/dt>/, 'the next action projection must not expose server workspace metadata');
   assert.match(preparedHtml, /projects\/pptmaster-app-shell-project/);
 
   assert.match(preparedHtml, /2026-07-09T12:10:00.000Z/);
@@ -728,7 +727,7 @@ function main() {
   assert.match(previewHtml, /Current phase:/);
   assert.match(previewHtml, /Current phase status/);
   assert.match(previewHtml, /spec_ready/);
-  assert.match(previewHtml, /Workspace/);
+  assert.doesNotMatch(previewHtml, /<dt>Workspace<\/dt>/, 'preview action UI must not expose server workspace metadata');
   assert.match(previewHtml, /projects\/pptmaster-app-shell-preview-project/);
   assert.match(previewHtml, /Founders preparing an investor pitch\./);
   assert.match(previewHtml, /Secure interest for a follow-up partner meeting\./);

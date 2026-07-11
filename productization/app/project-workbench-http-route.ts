@@ -3,6 +3,8 @@ import { renderProjectWorkbenchPage } from './project-workbench-page.js';
 import { handleStartGeneration } from '../backend/actions/start-generation.js';
 import { applySubmitConfirmations } from '../backend/actions/submit-confirmations.js';
 import { validateSubmitConfirmationsPayload } from '../backend/models/confirmations.js';
+import { exportLocalPhase } from '../backend/orchestrator/phase-runner.js';
+import { toProjectViewModel } from '../backend/services/project-view-service.js';
 import type { StartGenerationAction, SubmitConfirmationsAction } from '../backend/models/actions.js';
 import type { ProductArtifactRef } from '../backend/models/artifacts.js';
 import type { ProjectRecord, WorkflowCheckpoint } from '../backend/models/projects.js';
@@ -126,6 +128,10 @@ async function handleProjectActionPost(
 
   if (action === 'start_generation') {
     return handleStartGenerationSubmit(dependencies, projectId);
+  }
+
+  if (action === 'export_pptx') {
+    return handleExportPptxSubmit(dependencies, projectId);
   }
 
   return textResponse(400, `Unsupported action: ${action}`);
@@ -300,6 +306,102 @@ async function handleStartGenerationSubmit(
             ? await dependencies.checkpoints.listByProjectId(requestedProjectId)
             : [];
           return persistedCheckpoints.length > 0 ? persistedCheckpoints : [...existingCheckpoints, ...result.checkpoints];
+        },
+      },
+    },
+    projectId,
+  );
+
+  return {
+    status: page.status,
+    headers: { 'content-type': page.contentType },
+    body: page.body,
+  };
+}
+
+async function handleExportPptxSubmit(
+  dependencies: ProjectWorkbenchPageDependencies,
+  projectId: string,
+): Promise<ProjectWorkbenchHttpResponse> {
+  let project: ProjectRecord | null;
+  let existingArtifacts: ProductArtifactRef[] = [];
+  let existingCheckpoints: WorkflowCheckpoint[] = [];
+  try {
+    project = await dependencies.projects.getById(projectId);
+    existingArtifacts = await dependencies.artifacts.listByProjectId(projectId);
+    existingCheckpoints = dependencies.checkpoints.listByProjectId
+      ? await dependencies.checkpoints.listByProjectId(projectId)
+      : [];
+  } catch {
+    return htmlFailureResponse('Project unavailable', 'Could not load project data.');
+  }
+
+  if (!project) {
+    return textResponse(404, 'Project not found');
+  }
+
+  const latestCheckpoint = existingCheckpoints[existingCheckpoints.length - 1];
+  const exportEligible = toProjectViewModel(project, existingArtifacts, [], latestCheckpoint).nextActions.includes('export_pptx');
+  if (!exportEligible) {
+    return textResponse(400, 'Invalid transition: export_pptx requires completed current-run preview evidence');
+  }
+
+  // Verify the durable write boundary before invoking the runtime bridge. The
+  // bridge creates workspace-derived export files, so a store that cannot
+  // persist their project/artifact/checkpoint truth must fail closed first.
+  if (!dependencies.projects.update || !dependencies.artifacts.createMany || !dependencies.checkpoints.create) {
+    return htmlFailureResponse('Export unavailable', 'The project store cannot persist PPTX export.');
+  }
+
+  let result;
+  try {
+    result = exportLocalPhase(project);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('requires preview_available status')) {
+      return textResponse(400, `Invalid transition: ${message}`);
+    }
+    return textResponse(500, `Export PPTX failed: ${message}`);
+  }
+
+  try {
+    await dependencies.projects.update(result.project);
+    await dependencies.artifacts.createMany(result.artifacts);
+    for (const checkpoint of result.checkpoints) {
+      await dependencies.checkpoints.create(checkpoint);
+    }
+  } catch {
+    return htmlFailureResponse('Export unavailable', 'Could not persist PPTX export.');
+  }
+
+  const page = await renderProjectWorkbenchPage(
+    {
+      ...dependencies,
+      projects: {
+        ...dependencies.projects,
+        async getById(requestedProjectId: string) {
+          return requestedProjectId === projectId ? result.project : dependencies.projects.getById(requestedProjectId);
+        },
+      },
+      artifacts: {
+        ...dependencies.artifacts,
+        async listByProjectId(requestedProjectId: string) {
+          return requestedProjectId === projectId
+            ? [...existingArtifacts, ...result.artifacts]
+            : dependencies.artifacts.listByProjectId(requestedProjectId);
+        },
+      },
+      checkpoints: {
+        ...dependencies.checkpoints,
+        async getLatestByProjectId(requestedProjectId: string) {
+          return requestedProjectId === projectId
+            ? result.checkpoints[result.checkpoints.length - 1] ?? null
+            : dependencies.checkpoints.getLatestByProjectId(requestedProjectId);
+        },
+        async listByProjectId(requestedProjectId: string) {
+          return requestedProjectId === projectId
+            ? [...existingCheckpoints, ...result.checkpoints]
+            : dependencies.checkpoints.listByProjectId(requestedProjectId);
         },
       },
     },

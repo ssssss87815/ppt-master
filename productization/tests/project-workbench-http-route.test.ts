@@ -111,17 +111,14 @@ async function main() {
   assert.equal(malformed.status, 400, 'malformed route encoding should fail before repository access');
   assert.equal(malformed.body, 'Invalid project id');
 
-  const unsupportedAction = await handleProjectWorkbenchHttpRequest(dependencies(project), {
+  const rejectedExport = await handleProjectWorkbenchHttpRequest(dependencies(project), {
     method: 'POST',
     url: '/projects/pitch%20deck%20%2F%202026',
     body: JSON.stringify({ action: 'export_pptx' }),
   });
-  assert.equal(unsupportedAction.status, 400, 'unsupported POST actions should be rejected honestly');
-  assert.match(unsupportedAction.body, /Unsupported action: export_pptx/);
+  assert.equal(rejectedExport.status, 400);
+  assert.match(rejectedExport.body, /Invalid transition: export_pptx requires completed current-run preview evidence/);
 
-  let exportEligibleProjectWrites = 0;
-  let exportEligibleArtifactWrites = 0;
-  let exportEligibleCheckpointWrites = 0;
   const exportEligibleProject: ProjectRecord = {
     ...project,
     status: 'preview_available',
@@ -168,7 +165,6 @@ async function main() {
         return projectId === exportEligibleProject.projectId ? exportEligibleProject : null;
       },
       async update(updatedProject: ProjectRecord): Promise<ProjectRecord> {
-        exportEligibleProjectWrites += 1;
         return updatedProject;
       },
     },
@@ -177,7 +173,6 @@ async function main() {
         return projectId === exportEligibleProject.projectId ? [previewBundle, previewPage] : [];
       },
       async createMany(newArtifacts: ProductArtifactRef[]): Promise<ProductArtifactRef[]> {
-        exportEligibleArtifactWrites += 1;
         return newArtifacts;
       },
     },
@@ -189,7 +184,6 @@ async function main() {
         return projectId === exportEligibleProject.projectId ? [previewCheckpoint] : [];
       },
       async create(checkpoint: WorkflowCheckpoint): Promise<WorkflowCheckpoint> {
-        exportEligibleCheckpointWrites += 1;
         return checkpoint;
       },
     },
@@ -199,19 +193,7 @@ async function main() {
     url: '/projects/pitch%20deck%20%2F%202026',
   });
   assert.equal(exportEligibleView.status, 200, 'completed current-run preview evidence should project the adjacent export action');
-  assert.match(exportEligibleView.body, /data-action-code="export_pptx"/, 'the workbench should expose export as the next projected action');
-  assert.match(exportEligibleView.body, /Runtime action unavailable in this read-only workbench\./, 'the workbench must describe export as unavailable rather than fabricate an execution control');
-
-  const rejectedEligibleExport = await handleProjectWorkbenchHttpRequest(exportEligibleDependencies, {
-    method: 'POST',
-    url: '/projects/pitch%20deck%20%2F%202026',
-    body: JSON.stringify({ action: 'export_pptx' }),
-  });
-  assert.equal(rejectedEligibleExport.status, 400, 'runtime-eligible export remains unavailable without a persisted workbench action boundary');
-  assert.match(rejectedEligibleExport.body, /Unsupported action: export_pptx/);
-  assert.equal(exportEligibleProjectWrites, 0, 'rejected export must not update the project');
-  assert.equal(exportEligibleArtifactWrites, 0, 'rejected export must not create artifacts');
-  assert.equal(exportEligibleCheckpointWrites, 0, 'rejected export must not create checkpoints');
+  assert.match(exportEligibleView.body, /<button[^>]*data-action-code="export_pptx"/, 'the workbench should expose the runtime-eligible export as an execution control');
 
   let rejectedTransitionUpdates = 0;
   let rejectedTransitionArtifactWrites = 0;
