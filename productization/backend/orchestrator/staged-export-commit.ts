@@ -135,8 +135,16 @@ export async function runStagedExportThroughAtomicCommit(
     rmSync(staged.stageDir, { recursive: true, force: true });
     return { kind: 'delivered', delivery };
   } catch (error) {
-    rmSync(path.join(request.rootDir, 'exports', reservation.attempt.id), { recursive: true, force: true });
-    rmSync(staged.stageDir, { recursive: true, force: true });
+    try {
+      rmSync(path.join(request.rootDir, 'exports', reservation.attempt.id), { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup must not prevent the durable recoverable-failure transition.
+    }
+    try {
+      rmSync(staged.stageDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup must not prevent the durable recoverable-failure transition.
+    }
     await unitOfWork.fail({
       attemptId: reservation.attempt.id,
       errorClass: 'persistence_recoverable',

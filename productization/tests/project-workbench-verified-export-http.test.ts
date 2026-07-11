@@ -78,12 +78,12 @@ async function main() {
   const response = await handleProjectWorkbenchHttpRequest(dependencies, {
     method: 'POST',
     url: `/projects/${PROJECT_ID}`,
-    body: JSON.stringify({ action: 'export_pptx' }),
+    body: JSON.stringify({ action: 'export_pptx', idempotencyKey: 'verified-export-http-proof' }),
   });
 
   assert.equal(response.status, 200);
   assert.equal(invocations, 1, 'the workbench route must invoke the verified export runtime exactly once');
-  assert.match(response.body, /Export ready/);
+  assert.match(response.body, /export_ready/);
   assert.match(response.body, /Committed PPTX export|committed-pptx/);
   console.log('project workbench verified export HTTP test: ok');
 }

@@ -11,6 +11,7 @@ export type ProjectWorkbenchExportInput = {
   project: ProjectRecord;
   artifacts: ProductArtifactRef[];
   checkpoints: WorkflowCheckpoint[];
+  idempotencyKey: string;
 };
 
 export type ProjectWorkbenchExportResult = {

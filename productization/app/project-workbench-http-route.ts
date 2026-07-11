@@ -132,7 +132,7 @@ async function handleProjectActionPost(
     if (!dependencies.exportPptx) {
       return textResponse(400, 'Unsupported action: export_pptx');
     }
-    return handleExportPptxSubmit(dependencies, projectId);
+    return handleExportPptxSubmit(dependencies, projectId, parsedBody);
   }
 
   return textResponse(400, `Unsupported action: ${action}`);
@@ -215,6 +215,7 @@ async function handleConfirmationsSubmit(
 async function handleExportPptxSubmit(
   dependencies: ProjectWorkbenchPageDependencies,
   projectId: string,
+  parsedBody: Record<string, unknown>,
 ): Promise<ProjectWorkbenchHttpResponse> {
   if (!dependencies.exportPptx) {
     return htmlFailureResponse('Export unavailable', 'No verified export runtime is configured for this workbench.');
@@ -237,12 +238,19 @@ async function handleExportPptxSubmit(
     return textResponse(404, 'Project not found');
   }
 
-  if (project.status !== 'preview_available') {
+  if (project.status !== 'preview_available' && project.status !== 'export_ready') {
     return textResponse(400, 'Invalid transition: export_pptx requires preview_available status');
   }
 
+  const idempotencyKey = typeof parsedBody.idempotencyKey === 'string' && parsedBody.idempotencyKey.length > 0
+    ? parsedBody.idempotencyKey
+    : null;
+  if (!idempotencyKey) {
+    return textResponse(400, 'Missing idempotencyKey for export_pptx');
+  }
+
   try {
-    const result = await dependencies.exportPptx({ project, artifacts, checkpoints });
+    const result = await dependencies.exportPptx({ project, artifacts, checkpoints, idempotencyKey });
     if ((result.kind !== 'delivered' && result.kind !== 'completed') || !result.primaryArtifactId) {
       return htmlFailureResponse('Export unavailable', 'Verified export returned no durable delivery.');
     }
