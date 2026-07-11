@@ -136,6 +136,16 @@ export class StateBackedExportPersistenceUnitOfWork implements ExportPersistence
       if (existing && isActive(existing.status)) {
         return { kind: 'active' as const, attempt: clone(existing) };
       }
+      if (existing?.status === 'failed_recoverable') {
+        existing.status = 'reserved';
+        existing.leaseOwner = input.leaseOwner;
+        existing.leaseExpiresAt = input.leaseExpiresAt;
+        existing.attemptNumber += 1;
+        existing.errorClass = undefined;
+        existing.errorMessage = undefined;
+        existing.updatedAt = input.now;
+        return { kind: 'reserved' as const, attempt: clone(existing) };
+      }
       if (existing) {
         return { kind: 'rejected' as const, reason: 'missing_or_invalid_attempt' as const };
       }
