@@ -42,5 +42,6 @@ export type ExportDelivery = {
 export type ExportRejection =
   | 'project_not_preview_available'
   | 'project_run_mismatch'
+  | 'project_run_lease_conflict'
   | 'missing_or_invalid_attempt'
   | 'commit_invariant_violation';

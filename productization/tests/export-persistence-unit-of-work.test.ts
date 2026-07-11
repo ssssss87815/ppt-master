@@ -2,6 +2,8 @@ import { strict as assert } from 'node:assert';
 
 import {
   InMemoryExportPersistenceStore,
+  InMemoryExportPersistenceStateRepository,
+  StateBackedExportPersistenceUnitOfWork,
   type ExportCommitInput,
   type ExportPersistenceSnapshot,
 } from '../backend/state/export-persistence-unit-of-work.ts';
@@ -125,6 +127,17 @@ async function main() {
   assert.equal(contender.attempt.id, firstReservation.attempt.id, 'same-key contender should point to the original attempt');
   assert.equal(store.commitInvocationCount, 0, 'reservation contention must not invoke commit');
 
+  const differentKeySameRun = await store.open().reserve({
+    ...reservation(),
+    attemptId: 'attempt-same-run-other-key',
+    exportKey: `${EXPORT_KEY}:other-preview`,
+    leaseOwner: 'worker-other-key',
+  });
+  assert.equal(differentKeySameRun.kind, 'rejected', 'a different export key cannot bypass an active project/run lease');
+  if (differentKeySameRun.kind === 'rejected') {
+    assert.equal(differentKeySameRun.reason, 'project_run_lease_conflict');
+  }
+
   const delivery = await store.open().commit(commitInput());
   assert.equal(store.commitInvocationCount, 1, 'only the owning reservation may invoke one commit');
   assert.equal(delivery.attemptId, ATTEMPT_ID, 'delivery should be bound to the original attempt');
@@ -140,6 +153,17 @@ async function main() {
   assert.equal(freshRead.checkpoints[0]?.stage, 'export_ready', 'a fresh repository snapshot should expose the committed checkpoint');
   assert.equal(freshRead.projects[0]?.latestCheckpointId, freshRead.checkpoints[0]?.checkpointId, 'a fresh repository snapshot should keep project/checkpoint linkage atomic');
   assert.equal(freshRead.attempts[0]?.status, 'completed', 'a fresh repository snapshot should expose the completed attempt');
+
+  const repository = new InMemoryExportPersistenceStateRepository({ projects: [project()] });
+  const stateBacked = new StateBackedExportPersistenceUnitOfWork(repository);
+  const stateReservation = await stateBacked.reserve(reservation());
+  assert.equal(stateReservation.kind, 'reserved', 'the repository-backed adapter should reserve into server-owned state');
+  await stateBacked.commit(commitInput());
+  const independentFreshRead = repository.snapshot();
+  assert.equal(independentFreshRead.projects[0]?.status, 'export_ready', 'a separately held state repository snapshot should see the atomic project transition');
+  assert.equal(independentFreshRead.artifacts.length, 2, 'a separately held state repository snapshot should see all committed artifacts together');
+  assert.equal(independentFreshRead.checkpoints.length, 1, 'a separately held state repository snapshot should see the checkpoint together');
+  assert.equal(independentFreshRead.attempts[0]?.status, 'completed', 'a separately held state repository snapshot should see the completed attempt together');
 
   console.log('export persistence unit of work test: ok');
 }
