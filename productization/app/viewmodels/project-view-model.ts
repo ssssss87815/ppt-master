@@ -157,6 +157,7 @@ export type ProjectViewModel = {
   };
   workbench: {
     timeline?: ProjectTimelineItemViewModel[];
+    currentTimelineItem?: ProjectTimelineItemViewModel;
     strategistHandoff?: StrategistHandoffViewModel;
     sections: ProjectWorkbenchSectionViewModel[];
     confirmationState: {

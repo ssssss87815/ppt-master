@@ -28,7 +28,8 @@ const project = {
       gateLabel: 'Verified',
       verifiedArtifactCount: 2,
       pendingArtifactCount: 0,
-      generationGateCopy: 'Generation handoff verified and ready to start page generation.',
+      generationGateCopy: 'The strategist handoff is verified and generation may begin.',
+      artifacts: [],
     },
     confirmationState: {
       hasRecommendations: true,
