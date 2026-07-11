@@ -4,14 +4,15 @@
 
 # PPTMASTER 产品化 — 当前状态
 
-> **状态：** 已实现并验证一个以运行时为依据的 Project Workbench 切片，覆盖“锁定确认项”门禁。它是 PPT Master 之上的集成层，**不是**替代演示文稿生成流程的第二套工作流，也不是完整的生产应用。
+> **状态：** 已实现并验证一个以运行时为依据的 Project Workbench 切片，覆盖“锁定确认项”门禁和“已验证导出”的配套界面。它是 PPT Master 之上的集成层，**不是**替代演示文稿生成流程的第二套工作流，也不是完整的生产应用。
 >
-> **更新：** 2026-07-10
+> **更新：** 2026-07-11
 >
 > **当前验证基线：**
 > - `npx tsc -p tsconfig.json --noEmit` — 通过
 > - `npm run productization:mainline` — 通过
-> - 直接运行 `productization/tests/*.test.ts` — 46 通过 / 0 失败
+> - 直接运行 `productization/tests/*.test.ts` — 51 通过 / 0 失败
+> - 已验证导出 HTTP 证明 — 通过（`project-workbench-verified-export-http.test.ts`）
 
 ## 目的
 
@@ -94,13 +95,39 @@ Workbench 不会因确认项已提交就宣称 Strategist、generation、preview
 
 类型安全契约包含明确的 terminal failure 处理，因此 UI 能展示恢复状态而不会解锁后续动作。
 
+### 5. 已验证的 Workbench Export PPTX 切片
+
+Workbench 只有在服务端持有的当前 run preview evidence 通过验证时，才会暴露狭义的 Export PPTX 动作。已完成的切片流程为：
+
+```text
+校验 project/run/preview checkpoint evidence
+  -> 以 exportKey / idempotency key reserve，并实施 project-run lease
+  -> 将既有 export bridge 输出到确定性的 staging 目录
+  -> 拒绝或清理无效的 staged output
+  -> 原子提交 project + export artifacts + export-ready checkpoint + ExportAttempt
+  -> fresh GET 只暴露 durable delivery
+```
+
+持久化契约和 focused tests 覆盖 active/completed 的幂等复用、lease 冲突、失败回滚，以及 staging output 永远不能成为 fresh-read delivery 的规则。Workbench route/UI 会拒绝 stale、cross-run、缺失或其他无效 preview evidence，且不会暴露 server workspace path。
+
+相关 canonical 实现提交序列：
+
+- `43b7ec5` — 原子 export-persistence test double；
+- `4e331e0` — staged export bridge；
+- `b8dd251` — state-backed atomic export commit；
+- `9ccecb7` — verified Workbench export surface；
+- `c8d8ebf` — Workbench timeline-contract 修复。
+
+`project-workbench-verified-export-http.test.ts` 通过真实 localhost HTTP 证明：durable delivery 尚未存在时 export 不可用；存在后响应返回预期 PPTX MIME type 且 artifact 字节保持不变。这证明仓库内以运行时为依据的切片；**不**宣称生产下载服务、已部署宿主、生产数据库/文件系统，或对缺乏已验证运行时 evidence 的项目宣称 generation/export 已执行。
+
 ## 验证证据
 
 当前修订已检查：
 
 - 仓库 TypeScript：`npx tsc -p tsconfig.json --noEmit`。
 - 主线 bridge 与 Workbench：`npm run productization:mainline`。
-- 直接 inventory：全部 `productization/tests/*.test.ts`（46 通过 / 0 失败）。
+- 直接 inventory：全部 `productization/tests/*.test.ts`（51 通过 / 0 失败）。
+- 已验证导出 HTTP 证明：`project-workbench-verified-export-http.test.ts` 证明 export 前不可见；export 可用后，通过真实 localhost GET 返回预期 PPTX MIME type 且 artifact 字节保持不变。
 - 可持久化确认项证明：`project-workbench-confirmation-submit-post.test.ts` 在同一组 repositories 上执行 POST 后 fresh GET。
 - Shell/route 集成：`project-workbench-shell-confirmation-submission-integration.test.ts`。
 - 浏览器可见的失败重试行为：`project-workbench-confirmation-submit-error-ui.test.ts`。

@@ -1,13 +1,14 @@
 # PPTMASTER Productization — Current Status
 
-> **Status:** A runtime-backed Project Workbench slice is implemented and verified through the locked-confirmations gate. It is an integration layer over PPT Master, **not** a replacement presentation-generation workflow or a complete production application.
+> **Status:** A runtime-backed Project Workbench slice is implemented and verified through the locked-confirmations gate and a verified-export companion surface. It is an integration layer over PPT Master, **not** a replacement presentation-generation workflow or a complete production application.
 >
-> **Updated:** 2026-07-10
+> **Updated:** 2026-07-11
 >
 > **Current verification baseline:**
 > - `npx tsc -p tsconfig.json --noEmit` — pass
 > - `npm run productization:mainline` — pass
-> - direct `productization/tests/*.test.ts` inventory — 45 pass / 0 fail
+> - direct `productization/tests/*.test.ts` inventory — 51 pass / 0 fail
+> - verified-export HTTP proof — pass (`project-workbench-verified-export-http.test.ts`)
 
 ## Purpose
 
@@ -87,13 +88,39 @@ The workbench does not claim that Strategist, generation, preview, or export has
 
 The type-safe contracts include explicit terminal failure handling so the UI can present a recovery state without unlocking later actions.
 
+### 5. Verified Workbench Export PPTX slice
+
+The Workbench exposes the narrow Export PPTX action only behind server-owned current-run preview evidence. The completed slice:
+
+```text
+validate project/run/preview checkpoint evidence
+  -> reserve by exportKey / idempotency key and enforce the project-run lease
+  -> run the existing export bridge into a deterministic staging area
+  -> reject or clean up invalid staged output
+  -> atomically commit project + export artifacts + export-ready checkpoint + ExportAttempt
+  -> expose only the durable delivery through a fresh GET
+```
+
+The persistence contracts and focused tests cover active/completed idempotency reuse, lease conflicts, failure rollback, and the rule that staging output is never a fresh-read delivery. The Workbench route/UI remains unavailable for stale, cross-run, missing, or otherwise invalid preview evidence and does not expose server workspace paths.
+
+Relevant canonical implementation sequence:
+
+- `43b7ec5` — atomic export-persistence test double;
+- `4e331e0` — staged export bridge;
+- `b8dd251` — state-backed atomic export commit;
+- `9ccecb7` — verified Workbench export surface;
+- `c8d8ebf` — Workbench timeline-contract repair.
+
+`project-workbench-verified-export-http.test.ts` exercises real localhost HTTP behavior: export is absent before the durable delivery exists and, after it exists, the response uses the expected PPTX MIME type and preserves the artifact bytes. This proves the repository's runtime-backed slice; it does **not** claim a production download service, deployed host, production database/filesystem, or that generation/export has run for a project without verified runtime evidence.
+
 ## Verification evidence
 
 The following are checked at the current revision:
 
 - TypeScript repository check: `npx tsc -p tsconfig.json --noEmit`.
 - Mainline bridge and workbench checks: `npm run productization:mainline`.
-- Direct inventory: all `productization/tests/*.test.ts` files (45 pass / 0 fail).
+- Direct inventory: all `productization/tests/*.test.ts` files (51 pass / 0 fail).
+- Verified-export HTTP proof: `project-workbench-verified-export-http.test.ts` proves absence before export, then a real localhost GET with the expected PPTX MIME type and unchanged artifact bytes after export is available.
 - Durable confirmation proof: `project-workbench-confirmation-submit-post.test.ts` performs POST then fresh GET on the same repositories.
 - Shell/route integration proof: `project-workbench-shell-confirmation-submission-integration.test.ts`.
 - Browser-visible retry/error behavior: `project-workbench-confirmation-submit-error-ui.test.ts`.
