@@ -10,6 +10,7 @@ import {
 import type {
   ProjectTimelineItemViewModel,
   ProjectWorkbenchSectionViewModel,
+  StrategistHandoffViewModel,
   ProjectViewModel,
 } from '../../app/viewmodels/project-view-model.js';
 
@@ -405,9 +406,10 @@ function buildTimelineSections(
 
 function nextActionsFor(
   project: ProjectRecord,
-  confirmationSubmission: ProjectViewModel['workbench']['confirmationSubmission'],
-  strategistHandoff: ProjectViewModel['workbench']['strategistHandoff'],
-  hasExport: boolean,
+  confirmationSubmission: ConfirmationSubmissionViewModel | undefined,
+  strategistHandoff: StrategistHandoffViewModel | undefined,
+  hasRuntimeBackedPreview: boolean,
+  hasRuntimeBackedExport: boolean,
 ): ProjectViewModel['nextActions'] {
   if (project.status === 'draft') {
     return ['import_sources'];
@@ -429,11 +431,11 @@ function nextActionsFor(
     return ['resume_generation'];
   }
 
-  if (project.status === 'generation_in_progress' && hasExport) {
+  if (project.status === 'generation_in_progress' && hasRuntimeBackedExport) {
     return ['export_pptx'];
   }
 
-  if (project.status === 'preview_available') {
+  if (project.status === 'preview_available' && hasRuntimeBackedPreview && !hasRuntimeBackedExport) {
     return ['export_pptx'];
   }
 
@@ -468,6 +470,23 @@ function buildLatestRevisionRequest(project: ProjectRecord, artifacts: ProductAr
   };
 }
 
+function isCurrentReadyRuntimeArtifact(project: ProjectRecord, artifact: ProductArtifactRef): boolean {
+  return artifact.status === 'ready' && artifact.runId === project.lastRunId;
+}
+
+function hasCompletedCheckpointForArtifacts(
+  checkpoint: WorkflowCheckpoint | undefined,
+  stage: WorkflowCheckpoint['stage'],
+  artifacts: ProductArtifactRef[],
+): boolean {
+  if (!checkpoint || checkpoint.stage !== stage || checkpoint.status !== 'completed') {
+    return false;
+  }
+
+  const artifactIds = new Set(checkpoint.artifactIds);
+  return artifacts.length > 0 && artifacts.every((artifact) => artifactIds.has(artifact.artifactId));
+}
+
 export function toProjectViewModel(
   project: ProjectRecord,
   artifacts: ProductArtifactRef[],
@@ -477,9 +496,22 @@ export function toProjectViewModel(
 ): ProjectViewModel {
   const artifactStorageKeyById = new Map(artifacts.map((artifact) => [artifact.artifactId, artifact.storageKey]));
   const sources = buildSources(artifacts);
-  const previewBundle = latestArtifactByKind(artifacts, 'preview_bundle');
-  const previewPageArtifacts = sortArtifactsNewestFirst(artifacts).filter((artifact) => artifact.kind === 'preview_page_svg');
-  const latestExportArtifact = latestArtifactByKind(artifacts, 'export_pptx');
+  const readyCurrentRunArtifacts = artifacts.filter((artifact) => isCurrentReadyRuntimeArtifact(project, artifact));
+  const candidatePreviewBundle = latestArtifactByKind(readyCurrentRunArtifacts, 'preview_bundle');
+  const candidatePreviewPageArtifacts = sortArtifactsNewestFirst(readyCurrentRunArtifacts)
+    .filter((artifact) => artifact.kind === 'preview_page_svg');
+  const previewArtifacts = candidatePreviewBundle
+    ? [candidatePreviewBundle, ...candidatePreviewPageArtifacts]
+    : [];
+  const candidateExportArtifact = latestArtifactByKind(readyCurrentRunArtifacts, 'export_pptx');
+  const exportIsRuntimeBacked = candidateExportArtifact
+    ? hasCompletedCheckpointForArtifacts(latestCheckpoint, 'export_ready', [candidateExportArtifact])
+    : false;
+  const latestExportArtifact = exportIsRuntimeBacked ? candidateExportArtifact : undefined;
+  const previewIsRuntimeBacked = hasCompletedCheckpointForArtifacts(latestCheckpoint, 'preview_synced', previewArtifacts)
+    || exportIsRuntimeBacked;
+  const previewBundle = previewIsRuntimeBacked ? candidatePreviewBundle : undefined;
+  const previewPageArtifacts = previewIsRuntimeBacked ? candidatePreviewPageArtifacts : [];
   const confirmationResultArtifact = latestArtifactByKind(artifacts, 'confirmation_result');
   const strategistHandoff = buildStrategistHandoff(artifacts);
   const confirmationSubmission = buildConfirmationSubmission(project, recommendations, confirmationResultArtifact);
@@ -610,7 +642,13 @@ export function toProjectViewModel(
     Boolean(exportView),
   );
   const latestRevisionRequest = buildLatestRevisionRequest(project, artifacts);
-  const nextActions = nextActionsFor(project, confirmationSubmission, strategistHandoff, Boolean(exportView));
+  const nextActions = nextActionsFor(
+    project,
+    confirmationSubmission,
+    strategistHandoff,
+    previewIsRuntimeBacked,
+    exportIsRuntimeBacked,
+  );
   const artifactSummary = buildArtifactSummary(artifacts);
 
   if (

@@ -179,6 +179,18 @@ async function main() {
     createdAt: '2026-07-10T05:21:00.000Z',
   };
 
+  const exportCheckpoint: WorkflowCheckpoint = {
+    checkpointId: 'checkpoint-export-ready-001',
+    projectId: project.projectId,
+    stage: 'export_ready',
+    status: 'completed',
+    statusBefore: 'preview_available',
+    statusAfter: 'export_ready',
+    artifactIds: ['pptmaster-workbench-page-project-export-pptx'],
+    note: 'Export artifacts prepared by the runtime export bridge.',
+    createdAt: '2026-07-10T05:22:00.000Z',
+  };
+
   const startedCheckpoint: WorkflowCheckpoint = {
     checkpointId: 'checkpoint-generation-started-001',
     projectId: project.projectId,
@@ -238,7 +250,7 @@ async function main() {
     {
       projects: createMemoryProjectRepository(project),
       artifacts: createMemoryArtifactRepository(artifacts),
-      checkpoints: createMemoryCheckpointRepository([startedCheckpoint, latestCheckpoint]),
+      checkpoints: createMemoryCheckpointRepository([startedCheckpoint, latestCheckpoint, exportCheckpoint]),
       loadRecommendations: async (projectId: string) => (projectId === project.projectId ? recommendations : []),
     },
     project.projectId,
@@ -270,12 +282,12 @@ async function main() {
   assert.match(page.body, /data-preview-action="open">Open live preview<\/a>/, 'page should preserve the existing live-preview action');
   assert.match(page.body, /href="#panel-delivery">Delivery package<\/a>/, 'page directory should expose the delivery package panel when delivery data exists');
   assert.match(page.body, /href="#panel-checkpoint">Workflow checkpoint<\/a>/, 'page directory should include the checkpoint slice when checkpoint data exists');
-  assert.match(page.body, /checkpoint-preview-synced-001/, 'page checkpoint panel should show the latest projected checkpoint id');
-  assert.match(page.body, /Preview synced/, 'page checkpoint panel should show the latest projected checkpoint stage');
+  assert.match(page.body, /checkpoint-export-ready-001/, 'page checkpoint panel should show the latest projected checkpoint id');
+  assert.match(page.body, /Export ready/, 'page checkpoint panel should show the latest projected checkpoint stage');
   assert.match(page.body, /Completed/, 'page checkpoint panel should show the latest projected checkpoint status');
-  assert.match(page.body, /Preview synced after the first page landed\./, 'page checkpoint panel should show the latest projected checkpoint note');
-  assert.match(page.body, /<li>pptmaster-workbench-page-project-preview-bundle<\/li>/, 'page checkpoint panel should list checkpoint artifact ids');
-  assert.doesNotMatch(page.body, /<li>checkpoint-preview-synced-001<\/li>/, 'page checkpoint artifact list should not repeat the checkpoint id itself');
+  assert.match(page.body, /Export artifacts prepared by the runtime export bridge\./, 'page checkpoint panel should show the latest projected checkpoint note');
+  assert.match(page.body, /<li>pptmaster-workbench-page-project-export-pptx<\/li>/, 'page checkpoint panel should list checkpoint artifact ids');
+  assert.doesNotMatch(page.body, /<li>checkpoint-export-ready-001<\/li>/, 'page checkpoint artifact list should not repeat the checkpoint id itself');
   assert.match(page.body, /data-panel="delivery"/, 'page should include the dedicated delivery package panel when delivery artifacts are projected');
   assert.match(page.body, /<section[^>]+id="panel-delivery"[^>]+data-panel="delivery"/, 'page delivery panel should keep the dedicated delivery panel identity');
   assert.match(page.body, /<h2 id="panel-delivery-title">Delivery package<\/h2>/, 'page delivery panel should expose an accessible delivery heading');
