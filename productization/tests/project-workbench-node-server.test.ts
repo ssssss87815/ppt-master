@@ -94,6 +94,7 @@ async function main() {
     const generationWorkspace = path.join(root, 'runtime-workspace');
     try {
       cpSync(path.resolve('productization/test-fixtures/runtime-workspace'), generationWorkspace, { recursive: true });
+      const strategistRunId = 'node-route-proof-strategist-run';
       const generationProject: ProjectRecord = {
         ...project,
         status: 'spec_ready',
@@ -101,37 +102,53 @@ async function main() {
           projectId: project.projectId,
           workspacePath: generationWorkspace,
         },
-        lastRunId: 'node-route-proof-run',
+        lastRunId: strategistRunId,
         latestCheckpointId: 'node-route-proof-spec-ready',
       };
-    const generationArtifacts: ProductArtifactRef[] = [
-      {
-        artifactId: 'node-route-proof-design-spec',
-        projectId: generationProject.projectId,
-        kind: 'design_spec',
-        scope: 'project',
-        status: 'ready',
-        label: 'Design spec',
-        storageKey: 'projects/node-route-proof/design_spec.md',
-        mimeType: 'text/markdown',
-        metadata: { verification: 'verified_runtime_bridge' },
-        createdAt: '2026-07-10T12:05:00.000Z',
-        updatedAt: '2026-07-10T12:05:00.000Z',
-      },
-      {
-        artifactId: 'node-route-proof-spec-lock',
-        projectId: generationProject.projectId,
-        kind: 'spec_lock',
-        scope: 'project',
-        status: 'ready',
-        label: 'Spec lock',
-        storageKey: 'projects/node-route-proof/spec_lock.md',
-        mimeType: 'text/markdown',
-        metadata: { verification: 'verified_runtime_bridge' },
-        createdAt: '2026-07-10T12:05:00.000Z',
-        updatedAt: '2026-07-10T12:05:00.000Z',
-      },
-    ];
+      const generationArtifacts: ProductArtifactRef[] = [
+        {
+          artifactId: 'node-route-proof-confirmation-result',
+          projectId: generationProject.projectId,
+          kind: 'confirmation_result',
+          scope: 'project',
+          status: 'ready',
+          runId: strategistRunId,
+          label: 'Locked confirmation result',
+          storageKey: `${generationWorkspace}/confirmations/result.json`,
+          mimeType: 'application/json',
+          metadata: { lockedAt: '2026-07-10T12:05:00.000Z' },
+          createdAt: '2026-07-10T12:05:00.000Z',
+          updatedAt: '2026-07-10T12:05:00.000Z',
+        },
+        {
+          artifactId: 'node-route-proof-design-spec',
+          projectId: generationProject.projectId,
+          kind: 'design_spec',
+          scope: 'project',
+          status: 'ready',
+          runId: strategistRunId,
+          label: 'Design spec',
+          storageKey: `${generationWorkspace}/design_spec.md`,
+          mimeType: 'text/markdown',
+          metadata: { verification: 'materialized_from_locked_confirmations' },
+          createdAt: '2026-07-10T12:05:00.000Z',
+          updatedAt: '2026-07-10T12:05:00.000Z',
+        },
+        {
+          artifactId: 'node-route-proof-spec-lock',
+          projectId: generationProject.projectId,
+          kind: 'spec_lock',
+          scope: 'project',
+          status: 'locked',
+          runId: strategistRunId,
+          label: 'Spec lock',
+          storageKey: `${generationWorkspace}/spec_lock.md`,
+          mimeType: 'text/markdown',
+          metadata: { verification: 'materialized_from_locked_confirmations' },
+          createdAt: '2026-07-10T12:05:00.000Z',
+          updatedAt: '2026-07-10T12:05:00.000Z',
+        },
+      ];
     server.close();
     await once(server, 'close');
 

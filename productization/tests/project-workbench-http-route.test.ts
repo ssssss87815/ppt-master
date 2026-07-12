@@ -305,6 +305,7 @@ async function main() {
   const generationWorkspace = path.join(root, 'runtime-workspace');
   try {
     cpSync(path.resolve('productization/test-fixtures/runtime-workspace'), generationWorkspace, { recursive: true });
+    const strategistRunId = 'pitch-deck-strategist-run';
     const generationProject: ProjectRecord = {
       ...project,
       status: 'spec_ready',
@@ -312,37 +313,53 @@ async function main() {
         projectId: project.projectId,
         workspacePath: generationWorkspace,
       },
-      lastRunId: 'pitch-deck-run',
+      lastRunId: strategistRunId,
       latestCheckpointId: 'pitch-deck-spec-ready',
     };
     const generationArtifacts: ProductArtifactRef[] = [
-    {
-      artifactId: 'pitch-deck-design-spec',
-      projectId: generationProject.projectId,
-      kind: 'design_spec',
-      scope: 'project',
-      status: 'ready',
-      label: 'Design spec',
-      storageKey: 'projects/pitch-deck-route-proof/design_spec.md',
-      mimeType: 'text/markdown',
-      metadata: { verification: 'verified_runtime_bridge' },
-      createdAt: '2026-07-10T10:20:00.000Z',
-      updatedAt: '2026-07-10T10:20:00.000Z',
-    },
-    {
-      artifactId: 'pitch-deck-spec-lock',
-      projectId: generationProject.projectId,
-      kind: 'spec_lock',
-      scope: 'project',
-      status: 'ready',
-      label: 'Spec lock',
-      storageKey: 'projects/pitch-deck-route-proof/spec_lock.md',
-      mimeType: 'text/markdown',
-      metadata: { verification: 'verified_runtime_bridge' },
-      createdAt: '2026-07-10T10:20:00.000Z',
-      updatedAt: '2026-07-10T10:20:00.000Z',
-    },
-  ];
+      {
+        artifactId: 'pitch-deck-confirmation-result',
+        projectId: generationProject.projectId,
+        kind: 'confirmation_result',
+        scope: 'project',
+        status: 'ready',
+        runId: strategistRunId,
+        label: 'Locked confirmation result',
+        storageKey: `${generationWorkspace}/confirmations/result.json`,
+        mimeType: 'application/json',
+        metadata: { lockedAt: '2026-07-10T10:20:00.000Z' },
+        createdAt: '2026-07-10T10:20:00.000Z',
+        updatedAt: '2026-07-10T10:20:00.000Z',
+      },
+      {
+        artifactId: 'pitch-deck-design-spec',
+        projectId: generationProject.projectId,
+        kind: 'design_spec',
+        scope: 'project',
+        status: 'ready',
+        runId: strategistRunId,
+        label: 'Design spec',
+        storageKey: `${generationWorkspace}/design_spec.md`,
+        mimeType: 'text/markdown',
+        metadata: { verification: 'materialized_from_locked_confirmations' },
+        createdAt: '2026-07-10T10:20:00.000Z',
+        updatedAt: '2026-07-10T10:20:00.000Z',
+      },
+      {
+        artifactId: 'pitch-deck-spec-lock',
+        projectId: generationProject.projectId,
+        kind: 'spec_lock',
+        scope: 'project',
+        status: 'locked',
+        runId: strategistRunId,
+        label: 'Spec lock',
+        storageKey: `${generationWorkspace}/spec_lock.md`,
+        mimeType: 'text/markdown',
+        metadata: { verification: 'materialized_from_locked_confirmations' },
+        createdAt: '2026-07-10T10:20:00.000Z',
+        updatedAt: '2026-07-10T10:20:00.000Z',
+      },
+    ];
 
   const startGeneration = await handleProjectWorkbenchHttpRequest(
     dependencies(generationProject, generationArtifacts),

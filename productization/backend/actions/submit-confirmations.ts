@@ -19,6 +19,7 @@ export function applySubmitConfirmations(
 ): SubmitConfirmationsResult {
   assertProjectStatus(project.status, 'confirmation_pending', 'submitConfirmations');
 
+  const strategistRunId = `${project.projectId}-strategist-${Date.parse(createdAt)}`;
   const strategistPayload: SubmitConfirmationsPayload = {
     answers: action.payload.answers as SubmitConfirmationsPayload['answers'],
     lockedAt: createdAt,
@@ -31,6 +32,7 @@ export function applySubmitConfirmations(
     scope: 'project',
     label: 'Locked confirmations result',
     status: 'ready',
+    runId: strategistRunId,
     storageKey: `projects/${project.projectId}/confirmations/result.json`,
     metadata: {
       answers: action.payload.answers,
@@ -64,10 +66,11 @@ export function applySubmitConfirmations(
     now: createdAt,
   });
 
+  const strategistArtifacts = strategist.artifacts.map((artifact) => ({ ...artifact, runId: strategistRunId }));
   const checkpoint: WorkflowCheckpoint = {
     ...checkpointBase,
-    artifactIds: [resultArtifact.artifactId, ...strategist.artifacts.map((item) => item.artifactId)],
-    statusAfter: strategist.artifacts.some((item) => item.kind === 'spec_lock' && item.status === 'locked')
+    artifactIds: [resultArtifact.artifactId, ...strategistArtifacts.map((item) => item.artifactId)],
+    statusAfter: strategistArtifacts.some((item) => item.kind === 'spec_lock' && item.status === 'locked')
       ? 'spec_ready'
       : 'confirmation_locked',
   };
@@ -75,10 +78,11 @@ export function applySubmitConfirmations(
   const nextProject: ProjectRecord = {
     ...lockedProject,
     status: checkpoint.statusAfter,
-    updatedAt: createdAt,
+    lastRunId: checkpoint.statusAfter === 'spec_ready' ? strategistRunId : lockedProject.lastRunId,
+    latestCheckpointId: checkpoint.checkpointId,
   };
 
-  const artifacts = [resultArtifact, ...strategist.artifacts];
+  const artifacts = [resultArtifact, ...strategistArtifacts];
   const attached = attachCheckpoint(nextProject, checkpoint, artifacts, createdAt);
 
   return {

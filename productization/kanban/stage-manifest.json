@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "transitions": {
+    "workspace_delivery_availability->executor_svg_authoring": {
+      "predecessor_stage": "workspace_delivery_availability",
+      "next_stage": "executor_svg_authoring",
+      "predecessor_review_title_prefix": "PPTM [delivery availability remediation review]",
+      "allowed_changed_file_prefixes": [
+        "productization/backend/adapter/generation-runtime-bridge.ts",
+        "productization/backend/adapter/preview-runtime-bridge.ts",
+        "productization/backend/orchestrator/phase-runner.ts",
+        "productization/backend/orchestrator/workflow-orchestrator.ts",
+        "productization/backend/state/",
+        "productization/tests/"
+      ],
+      "allowed_verification_commands": [
+        "npm run runtime:generation-bridge",
+        "npm run runtime:preview-bridge",
+        "npm run runtime:phase-runner-preview",
+        "npm run runtime:workflow-local",
+        "npx tsc -p tsconfig.json --noEmit",
+        "git diff --check"
+      ],
+      "required_artifact_identity_fields": ["project_id", "run_id", "checkpoint_id"],
+      "required_four_piece_evidence_fields": ["rtk", "codebase", "ponytail", "agent_skills"],
+      "cards": [
+        {
+          "role": "implementation",
+          "title": "PPTM [executor SVG authoring]: implement bounded same-run SVG authoring entry"
+        },
+        {
+          "role": "verification",
+          "title": "PPTM [executor SVG authoring verify]: independently validate bounded SVG authoring entry"
+        },
+        {
+          "role": "review",
+          "title": "PPTM [executor SVG authoring review]: independently review bounded SVG authoring entry"
+        }
+      ]
+    }
+  }
+}

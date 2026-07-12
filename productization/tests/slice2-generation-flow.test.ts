@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { exportLocalPhase, requestRevision, runResumeGeneration, runStartGeneration, syncPreviewArtifacts } from '../backend/orchestrator/phase-runner';
+import type { ProductArtifactRef } from '../backend/models/artifacts';
 import type { ProjectRecord } from '../backend/models/projects';
 
 function createProjectFixture(): ProjectRecord {
@@ -16,10 +17,32 @@ function createProjectFixture(): ProjectRecord {
       projectId: 'probe-project',
       workspacePath: '',
     },
-    lastRunId: 'probe-project-run-1',
+    lastRunId: 'probe-project-strategist-1',
     createdAt: '2026-07-07T10:00:00.000Z',
     updatedAt: '2026-07-07T10:00:00.000Z',
   };
+}
+
+function createVerifiedStrategistArtifacts(project: ProjectRecord): ProductArtifactRef[] {
+  const createdAt = project.updatedAt;
+  const runId = project.lastRunId;
+  return [
+    {
+      artifactId: `${project.projectId}-confirmations-result`, projectId: project.projectId, kind: 'confirmation_result',
+      scope: 'project', status: 'ready', runId, storageKey: `${project.workspace.workspacePath}/confirmations/result.json`,
+      metadata: { lockedAt: createdAt }, createdAt, updatedAt: createdAt,
+    },
+    {
+      artifactId: `${project.projectId}-design-spec`, projectId: project.projectId, kind: 'design_spec',
+      scope: 'project', status: 'ready', runId, storageKey: `${project.workspace.workspacePath}/design_spec.md`,
+      metadata: { verification: 'materialized_from_locked_confirmations' }, createdAt, updatedAt: createdAt,
+    },
+    {
+      artifactId: `${project.projectId}-spec-lock`, projectId: project.projectId, kind: 'spec_lock',
+      scope: 'project', status: 'locked', runId, storageKey: `${project.workspace.workspacePath}/spec_lock.md`,
+      metadata: { verification: 'materialized_from_locked_confirmations' }, createdAt, updatedAt: createdAt,
+    },
+  ];
 }
 
 test('slice-2 generation/export flow keeps preview and export downstream surfaces aligned with refreshed post-authoring evidence', () => {
@@ -36,7 +59,7 @@ test('slice-2 generation/export flow keeps preview and export downstream surface
     writeFileSync(path.join(workspace, 'design_spec.md'), '# design spec\n', 'utf8');
     writeFileSync(path.join(workspace, 'spec_lock.md'), '## colors\n- primary: #2F7D4A\n', 'utf8');
 
-    const started = runStartGeneration(project, [], '2026-07-07T10:05:00.000Z');
+    const started = runStartGeneration(project, createVerifiedStrategistArtifacts(project), '2026-07-07T10:05:00.000Z');
     assert.equal(started.project.status, 'generation_in_progress');
     assert.equal(started.nextStatus, 'generation_in_progress');
     assert.equal(started.checkpoints[0]?.stage, 'generation_started');

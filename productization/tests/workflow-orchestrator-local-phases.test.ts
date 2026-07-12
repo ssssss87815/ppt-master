@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { runLocalExportPhase, runLocalGenerationPhase, runLocalResumePhase, runLocalRevisionPhase } from '../backend/orchestrator/workflow-orchestrator';
+import type { ProductArtifactRef } from '../backend/models/artifacts';
 import type { ProjectRecord } from '../backend/models/projects';
 import { toProjectViewModel } from '../backend/services/project-view-service';
 
@@ -26,6 +27,28 @@ function baseProject(status: ProjectRecord['status'], workspacePath: string): Pr
     createdAt: '2026-06-30T16:00:00.000Z',
     updatedAt: '2026-06-30T16:15:00.000Z',
   };
+}
+
+function strategistArtifacts(project: ProjectRecord): ProductArtifactRef[] {
+  const createdAt = project.updatedAt;
+  const runId = project.lastRunId;
+  return [
+    {
+      artifactId: `${project.projectId}-confirmation-result`, projectId: project.projectId, kind: 'confirmation_result',
+      scope: 'project', status: 'ready', runId, storageKey: `${project.workspace.workspacePath}/confirmations/result.json`,
+      metadata: { lockedAt: createdAt }, createdAt, updatedAt: createdAt,
+    },
+    {
+      artifactId: `${project.projectId}-design-spec`, projectId: project.projectId, kind: 'design_spec',
+      scope: 'project', status: 'ready', runId, storageKey: `${project.workspace.workspacePath}/design_spec.md`,
+      metadata: { verification: 'materialized_from_locked_confirmations' }, createdAt, updatedAt: createdAt,
+    },
+    {
+      artifactId: `${project.projectId}-spec-lock`, projectId: project.projectId, kind: 'spec_lock',
+      scope: 'project', status: 'locked', runId, storageKey: `${project.workspace.workspacePath}/spec_lock.md`,
+      metadata: { verification: 'materialized_from_locked_confirmations' }, createdAt, updatedAt: createdAt,
+    },
+  ];
 }
 
 function makeWorkspaceFixture(projectId: string): { workspacePath: string; cleanup: () => void } {
@@ -61,8 +84,15 @@ function main() {
   const fixture = makeWorkspaceFixture('pptmaster-demo-project');
 
   try {
-    const specReadyProject = baseProject('spec_ready', fixture.workspacePath);
-    const generated = runLocalGenerationPhase(specReadyProject, '2026-06-30T16:20:00.000Z');
+    const specReadyProject = {
+      ...baseProject('spec_ready', fixture.workspacePath),
+      lastRunId: 'pptmaster-demo-project-strategist-1',
+    };
+    const generated = runLocalGenerationPhase(
+      specReadyProject,
+      '2026-06-30T16:20:00.000Z',
+      strategistArtifacts(specReadyProject),
+    );
     assert(generated.started.project.status === 'generation_in_progress', 'local generation should start generation');
     assert(generated.started.project.status === 'generation_in_progress', 'local generation start should expose the generation-in-progress project state for orchestration consumers');
 

@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
 
 import type { ProductArtifactRef } from '../backend/models/artifacts.js';
 import type { ExportDelivery } from '../backend/models/export-attempt.js';
@@ -56,6 +58,27 @@ function latestCheckpoint(snapshot: ExportPersistenceSnapshot, projectId: string
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null;
 }
 
+function previewPageDigest(artifact: ProductArtifactRef): string | null {
+  if (!artifact.storageKey) return null;
+  const filePath = path.resolve(artifact.storageKey);
+  if (!existsSync(filePath)) return null;
+  try {
+    return createHash('sha256').update(readFileSync(filePath)).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
+function hasCurrentWorkspacePreviewEvidence(previewArtifacts: ProductArtifactRef[]): boolean {
+  return previewArtifacts.every((artifact) => {
+    const provenance = artifact.metadata?.generationProvenance;
+    const expectedDigest = provenance && typeof provenance === 'object'
+      ? (provenance as { sha256?: unknown }).sha256
+      : undefined;
+    return typeof expectedDigest === 'string' && expectedDigest.length > 0 && previewPageDigest(artifact) === expectedDigest;
+  });
+}
+
 function deriveCurrentPreviewEvidence(snapshot: ExportPersistenceSnapshot, projectId: string): ValidatedPreviewEvidence | null {
   const project = snapshot.projects.find((item) => item.projectId === projectId);
   const currentRunId = project?.lastRunId;
@@ -78,23 +101,48 @@ function deriveCurrentPreviewEvidence(snapshot: ExportPersistenceSnapshot, proje
   );
   const manifest = lockedArtifacts.find((artifact) => artifact.kind === 'preview_bundle');
   const previewArtifacts = lockedArtifacts.filter((artifact) => artifact.kind === 'preview_page_svg');
-  if (!manifest || !previewArtifacts.length) {
+  if (!manifest || !previewArtifacts.length || !hasCurrentWorkspacePreviewEvidence(previewArtifacts)) {
     return null;
   }
 
   return { project, currentRunId, lockedPreviewCheckpoint, manifest, previewArtifacts };
 }
 
+function durableArtifactPath(rootDir: string, storageKey: string): string | null {
+  const root = path.resolve(rootDir);
+  const resolved = path.resolve(root, storageKey);
+  const relative = path.relative(root, resolved);
+  if (relative === '' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return null;
+  return resolved;
+}
+
+function hasDurableArtifactProof(primary: ProductArtifactRef, rootDir: string): boolean {
+  const storagePath = durableArtifactPath(rootDir, primary.storageKey);
+  const expectedBytes = primary.metadata?.bytes;
+  const expectedDigest = primary.metadata?.sha256;
+  if (!storagePath || typeof expectedBytes !== 'number' || expectedBytes <= 0 || typeof expectedDigest !== 'string' || !/^[a-f0-9]{64}$/i.test(expectedDigest)) {
+    return false;
+  }
+  try {
+    return statSync(storagePath).isFile()
+      && statSync(storagePath).size === expectedBytes
+      && createHash('sha256').update(readFileSync(storagePath)).digest('hex') === expectedDigest;
+  } catch {
+    return false;
+  }
+}
+
 function durableDelivery(
   snapshot: ExportPersistenceSnapshot,
   delivery: ExportDelivery,
   kind: ProjectWorkbenchExportResult['kind'],
+  rootDir: string,
 ): ProjectWorkbenchExportResult {
   const attempt = snapshot.attempts.find((item) => item.id === delivery.attemptId && item.status === 'completed');
   const project = snapshot.projects.find((item) => item.projectId === delivery.projectId && item.status === 'export_ready');
   const primary = snapshot.artifacts.find((item) => item.artifactId === delivery.primaryArtifactId && item.kind === 'export_pptx' && item.status === 'ready');
   const checkpoint = snapshot.checkpoints.find((item) => item.checkpointId === delivery.checkpointId && item.stage === 'export_ready' && item.status === 'completed');
-  if (!attempt || !project || !primary || !checkpoint || !attempt.committedArtifactIds.includes(primary.artifactId)) {
+  if (!attempt || !project || !primary || !checkpoint || !attempt.committedArtifactIds.includes(primary.artifactId) || !hasDurableArtifactProof(primary, rootDir)) {
     throw new Error('verified export did not produce a fresh durable delivery');
   }
   return { kind, primaryArtifactId: primary.artifactId };
@@ -177,7 +225,7 @@ export function createVerifiedExportWorkbenchDependencies(
       if (result.kind !== 'delivered' && result.kind !== 'completed') {
         throw new Error('verified export did not commit a durable delivery');
       }
-      return durableDelivery(state.snapshot(), result.delivery, result.kind);
+      return durableDelivery(state.snapshot(), result.delivery, result.kind, options.rootDir);
     },
   };
 }

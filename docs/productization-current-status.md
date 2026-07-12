@@ -154,6 +154,10 @@ locked confirmations
 
 Before a generation or delivery action is exposed, tests must prove that failed, pending, planned, stale, superseded, or cross-run artifacts cannot unlock it. The workbench must explain the block truthfully and must not fabricate a completion state.
 
+### 2026-07-12: same-run strategist eligibility gate verified
+
+`start_generation` now requires exactly one current locked `confirmation_result`, ready `design_spec`, and locked `spec_lock`, all bound to the `spec_ready` project's strategist run id, canonical workspace paths, and runtime materialization evidence. Missing, stale/cross-run, superseded, unlocked, duplicate, pending, and unverified artifacts fail before generation runtime invocation; the HTTP route returns a truthful 400 transition denial. Targeted negative coverage is `npm run slice2:orchestrator-gating`; the canonical runtime handoff is validated by `npm run slice2:generation`, `npm run runtime:phase-runner-preview`, and `npm run runtime:workbench-http-route`.
+
 ## Bottom line
 
 The productization area now has a verified runtime-backed confirmation workbench slice with durable locking and truthful next-step projection.

@@ -16,23 +16,52 @@ export type RequestRevisionResult = ProductActionResult & {
   revisions: RevisionRequestRecord[];
 };
 
-function hasUnverifiedStrategistBridge(artifacts: ProductArtifactRef[]): boolean {
-  return artifacts.some(
-    (artifact) =>
-      (artifact.kind === 'design_spec' || artifact.kind === 'spec_lock') &&
-      artifact.metadata?.verification === 'unverified_runtime_bridge',
-  );
-}
-
 function assertStrategistBridgeVerified(project: ProjectRecord, artifacts: ProductArtifactRef[]): void {
-  if (project.status !== 'spec_ready') {
-    return;
+  const strategistRunId = project.lastRunId;
+  const requiredArtifacts: Array<{
+    kind: 'confirmation_result' | 'design_spec' | 'spec_lock';
+    status: ProductArtifactRef['status'];
+    storageKey: string;
+  }> = [
+    {
+      kind: 'confirmation_result',
+      status: 'ready',
+      storageKey: `${project.workspace.workspacePath}/confirmations/result.json`,
+    },
+    { kind: 'design_spec', status: 'ready', storageKey: `${project.workspace.workspacePath}/design_spec.md` },
+    { kind: 'spec_lock', status: 'locked', storageKey: `${project.workspace.workspacePath}/spec_lock.md` },
+  ];
+  const failures: string[] = [];
+
+  if (!strategistRunId) {
+    failures.push('spec_ready project has no strategist run identity');
   }
 
-  if (hasUnverifiedStrategistBridge(artifacts)) {
-    throw new Error(
-      'start_generation requires verified strategist outputs; design_spec/spec_lock still carry unverified_runtime_bridge metadata',
-    );
+  for (const required of requiredArtifacts) {
+    const matches = artifacts.filter((artifact) => artifact.kind === required.kind);
+    if (matches.length !== 1) {
+      failures.push(`${required.kind} must have exactly one current artifact; found ${matches.length}`);
+      continue;
+    }
+
+    const artifact = matches[0];
+    if (artifact.projectId !== project.projectId) failures.push(`${required.kind} has a foreign project identity`);
+    if (artifact.runId !== strategistRunId) failures.push(`${required.kind} is stale or cross-run`);
+    if (artifact.status !== required.status) failures.push(`${required.kind} is ${artifact.status}, not ${required.status}`);
+    if (artifact.storageKey !== required.storageKey) failures.push(`${required.kind} has a non-canonical artifact path`);
+    if (required.kind === 'confirmation_result' && typeof artifact.metadata?.lockedAt !== 'string') {
+      failures.push('confirmation_result is not a locked confirmation result');
+    }
+    if (
+      (required.kind === 'design_spec' || required.kind === 'spec_lock') &&
+      artifact.metadata?.verification !== 'materialized_from_locked_confirmations'
+    ) {
+      failures.push(`${required.kind} lacks runtime strategist verification evidence`);
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`start_generation requires verified strategist outputs with same-run eligibility: ${failures.join('; ')}`);
   }
 }
 

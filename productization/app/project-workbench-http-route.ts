@@ -300,7 +300,11 @@ async function handleStartGenerationSubmit(
     result = handleStartGeneration(project, action, existingArtifacts);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (message.includes('requires spec_ready status') || message.includes('requires verified strategist outputs')) {
+    if (
+      message.includes('requires spec_ready status') ||
+      message.includes('requires verified strategist outputs') ||
+      message.includes('requires same-run verified strategist outputs')
+    ) {
       return textResponse(400, `Invalid transition: ${message}`);
     }
     return textResponse(500, `Start generation failed: ${message}`);
