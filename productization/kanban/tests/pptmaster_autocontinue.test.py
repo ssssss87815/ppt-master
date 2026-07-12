@@ -16,6 +16,8 @@ assert "lane_body" not in functions, "guard must not manufacture task bodies"
 assert "candidate_seen_recently" not in functions, "guard must not dedupe dynamically created work"
 assert "existing_open_title" not in functions, "guard must not search for dynamically created work"
 
+assert "ASSIGNEE = os.environ.get(\"PPTMASTER_KANBAN_ASSIGNEE\", \"default\")" in source
+
 main = functions["main"]
 main_calls = {
     node.func.id
@@ -32,6 +34,19 @@ root_source = ast.get_source_segment(source, root) or ""
 assert 'status == "blocked"' in root_source
 assert 'block_kind in {"needs_input", "waiting_dependency"}' in root_source
 assert '"SELECT COUNT(*) FROM task_links WHERE child_id = ?"' in root_source
+
+candidate = functions["latest_autoclose_candidate"]
+candidate_source = ast.get_source_segment(source, candidate) or ""
+assert 'SELECT tr.summary' in candidate_source
+assert 'WHERE tr.task_id = t.id' in candidate_source
+assert 'ORDER BY tr.id DESC' in candidate_source
+assert 'ORDER BY tc.id DESC' in candidate_source
+assert "t.block_kind = 'needs_input'" not in candidate_source
+assert 'LEFT JOIN task_runs tr ON tr.id = t.current_run_id' not in candidate_source
+assert 'ORDER BY tc.id ASC' not in candidate_source
+assert 'reversed(list(re.finditer' in source
+assert '### Changed files' in source
+assert '### Verification commands' in source
 
 policy = functions["should_autoclose"]
 policy_source = ast.get_source_segment(source, policy) or ""

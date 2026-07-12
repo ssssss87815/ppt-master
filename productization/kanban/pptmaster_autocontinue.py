@@ -15,7 +15,7 @@ DB = Path(
         f"/home/ubuntu/.hermes/kanban/boards/{BOARD}/kanban.db",
     )
 )
-ASSIGNEE = os.environ.get("PPTMASTER_KANBAN_ASSIGNEE", "coder")
+ASSIGNEE = os.environ.get("PPTMASTER_KANBAN_ASSIGNEE", "default")
 REPO_ROOT = Path(
     os.environ.get("PPTMASTER_REPO_ROOT", str(Path(__file__).resolve().parents[2]))
 ).resolve()
@@ -70,25 +70,36 @@ def sql_in_clause(values: Iterable[str]):
 
 
 def extract_json_object(text: str):
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        return None
-    candidate = text[start : end + 1]
-    try:
-        return json.loads(candidate)
-    except Exception:
-        return None
+    for match in reversed(list(re.finditer(r"\{[^{}]*\}", text, flags=re.S))):
+        try:
+            parsed = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
 
 
 def extract_list_field(text: str, key: str):
     obj = extract_json_object(text)
-    if not obj or key not in obj:
+    if obj and key in obj and isinstance(obj[key], list):
+        return [str(x) for x in obj[key]]
+
+    heading = {
+        "changed_files": r"(?:^|\n)### Changed files[^\n]*\n(.*?)(?=\n### |\Z)",
+        "verification_commands": r"(?:^|\n)### Verification commands[^\n]*\n(.*?)(?=\n### |\Z)",
+    }.get(key)
+    if not heading:
         return None
-    value = obj.get(key)
-    if not isinstance(value, list):
+    match = re.search(heading, text, flags=re.I | re.S)
+    if not match:
         return None
-    return [str(x) for x in value]
+    values = []
+    for line in match.group(1).splitlines():
+        item = re.match(r"\s*-\s+`?([^`\n]+?)`?(?:\s+→.*)?\s*$", line)
+        if item:
+            values.append(item.group(1).strip())
+    return values or None
 
 
 def extract_changed_files(text: str):
@@ -141,19 +152,24 @@ LANES = load_registry(REGISTRY_PATH)
 def latest_autoclose_candidate(cur, lane: LanePolicy):
     rows = cur.execute(
         """
-        SELECT t.id, t.title, tr.summary,
+        SELECT t.id, t.title,
+               (
+                 SELECT tr.summary
+                 FROM task_runs tr
+                 WHERE tr.task_id = t.id
+                 ORDER BY tr.id DESC
+                 LIMIT 1
+               ) AS latest_run_summary,
                (
                  SELECT tc.body
                  FROM task_comments tc
                  WHERE tc.task_id = t.id
-                 ORDER BY tc.id ASC
+                 ORDER BY tc.id DESC
                  LIMIT 1
-               ) AS first_comment_body
+               ) AS latest_comment_body
         FROM tasks t
-        LEFT JOIN task_runs tr ON tr.id = t.current_run_id
         WHERE t.status = 'blocked'
           AND t.assignee = ?
-          AND t.block_kind = 'needs_input'
           AND t.current_run_id IS NULL
         ORDER BY coalesce(t.started_at, t.created_at) DESC
         """,
@@ -176,9 +192,10 @@ def commands_allowed(lane: LanePolicy, commands: list[str]):
         rf"^cd {re.escape(str(REPO_ROOT))} && npx --yes tsx /tmp/hermes-verify-[A-Za-z0-9_\-]+\.ts$"
     )
     for cmd in commands:
-        if cmd in expected:
+        normalized = cmd if cmd.startswith(f"cd {REPO_ROOT} &&") else f"cd {REPO_ROOT} && {cmd}"
+        if normalized in expected:
             continue
-        if adhoc_pattern.match(cmd):
+        if adhoc_pattern.match(normalized):
             continue
         return False
     return True
@@ -202,8 +219,7 @@ def should_autoclose(lane: LanePolicy, title: str, blob: str):
     commands = extract_verification_commands(blob)
     if not commands:
         return False, "missing-verification-commands"
-    normalized = [cmd if cmd.startswith(f"cd {REPO_ROOT} &&") else f"cd {REPO_ROOT} && {cmd}" for cmd in commands]
-    if not commands_allowed(lane, normalized):
+    if not commands_allowed(lane, commands):
         return False, "verification-commands-out-of-policy"
     return True, "ok"
 
