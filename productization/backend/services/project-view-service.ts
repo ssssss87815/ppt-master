@@ -487,12 +487,21 @@ function hasCompletedCheckpointForArtifacts(
   return artifacts.length > 0 && artifacts.every((artifact) => artifactIds.has(artifact.artifactId));
 }
 
+function hasCompletedCheckpointForCurrentRunArtifacts(
+  checkpoints: WorkflowCheckpoint[] | undefined,
+  stage: WorkflowCheckpoint['stage'],
+  artifacts: ProductArtifactRef[],
+): boolean {
+  return (checkpoints ?? []).some((checkpoint) => hasCompletedCheckpointForArtifacts(checkpoint, stage, artifacts));
+}
+
 export function toProjectViewModel(
   project: ProjectRecord,
   artifacts: ProductArtifactRef[],
   recommendations: ConfirmationRecommendation[],
   latestCheckpoint?: WorkflowCheckpoint,
   lastStartedCheckpoint?: WorkflowCheckpoint,
+  checkpoints?: WorkflowCheckpoint[],
 ): ProjectViewModel {
   const artifactStorageKeyById = new Map(artifacts.map((artifact) => [artifact.artifactId, artifact.storageKey]));
   const sources = buildSources(artifacts);
@@ -504,11 +513,14 @@ export function toProjectViewModel(
     ? [candidatePreviewBundle, ...candidatePreviewPageArtifacts]
     : [];
   const candidateExportArtifact = latestArtifactByKind(readyCurrentRunArtifacts, 'export_pptx');
+  const currentRunCheckpoints = checkpoints ?? [latestCheckpoint].filter(
+    (checkpoint): checkpoint is WorkflowCheckpoint => Boolean(checkpoint),
+  );
   const exportIsRuntimeBacked = candidateExportArtifact
-    ? hasCompletedCheckpointForArtifacts(latestCheckpoint, 'export_ready', [candidateExportArtifact])
+    ? hasCompletedCheckpointForCurrentRunArtifacts(currentRunCheckpoints, 'export_ready', [candidateExportArtifact])
     : false;
   const latestExportArtifact = exportIsRuntimeBacked ? candidateExportArtifact : undefined;
-  const previewIsRuntimeBacked = hasCompletedCheckpointForArtifacts(latestCheckpoint, 'preview_synced', previewArtifacts)
+  const previewIsRuntimeBacked = hasCompletedCheckpointForCurrentRunArtifacts(currentRunCheckpoints, 'preview_synced', previewArtifacts)
     || exportIsRuntimeBacked;
   const previewBundle = previewIsRuntimeBacked ? candidatePreviewBundle : undefined;
   const previewPageArtifacts = previewIsRuntimeBacked ? candidatePreviewPageArtifacts : [];

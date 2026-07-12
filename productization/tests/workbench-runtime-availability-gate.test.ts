@@ -126,12 +126,49 @@ function main() {
   assert.equal(previewView.preview?.pageCount, 1, 'completed runtime preview checkpoint should expose current-run preview artifacts');
   assert.equal(previewView.nextActions.includes('export_pptx'), true, 'completed runtime preview checkpoint should expose the adjacent export action');
 
+  const newerUnrelatedCheckpoint = checkpoint('generation_started', 'completed', [], {
+    checkpointId: 'newer-unrelated-checkpoint',
+    createdAt: '2026-07-11T10:00:00.000Z',
+  });
+  const previewWithNewerCheckpoint = toProjectViewModel(
+    project('preview_available'),
+    [previewBundle, previewPage],
+    [],
+    newerUnrelatedCheckpoint,
+    undefined,
+    [previewCheckpoint, newerUnrelatedCheckpoint],
+  );
+  assert.equal(
+    previewWithNewerCheckpoint.preview?.pageCount,
+    1,
+    'a newer unrelated checkpoint must not hide completed current-run preview evidence',
+  );
+  assert.equal(
+    previewWithNewerCheckpoint.nextActions.includes('export_pptx'),
+    true,
+    'a newer unrelated checkpoint must not hide the export action backed by current-run preview evidence',
+  );
+
   const exportCheckpoint = checkpoint('export_ready', 'completed', [exportPptx.artifactId], {
     statusBefore: 'preview_available',
     statusAfter: 'export_ready',
   });
   const exportView = toProjectViewModel(project('export_ready'), [previewBundle, previewPage, exportPptx], [], exportCheckpoint);
   assert.equal(exportView.export?.latestExportUrl, '/projects/runtime-availability-gate/export_pptx', 'completed runtime export checkpoint should expose the current-run PPTX artifact');
+
+  const exportWithNewerCheckpoint = toProjectViewModel(
+    project('export_ready'),
+    [previewBundle, previewPage, exportPptx],
+    [],
+    newerUnrelatedCheckpoint,
+    undefined,
+    [previewCheckpoint, exportCheckpoint, newerUnrelatedCheckpoint],
+  );
+  assert.equal(
+    exportWithNewerCheckpoint.export?.latestExportUrl,
+    '/projects/runtime-availability-gate/export_pptx',
+    'a newer unrelated checkpoint must not hide completed current-run export evidence',
+  );
 
   console.log('workbench runtime availability gate test: ok');
 }

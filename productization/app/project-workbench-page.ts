@@ -171,6 +171,7 @@ export async function renderProjectWorkbenchPage(
     typedRecommendations,
     latestCheckpoint ?? undefined,
     latestStartedCheckpoint,
+    checkpoints,
   ) as unknown as ProjectViewModel;
   viewModel.workbench.exportAvailable = Boolean(dependencies.exportPptx);
 
