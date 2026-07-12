@@ -45,9 +45,9 @@
       },
       "doc_anchors": [
         "docs/productization-current-status.md#required-next-increment",
-        "docs/zh/productization-current-status.md#下一阶段",
+        "docs/zh/productization-current-status.md#\u4e0b\u4e00\u9636\u6bb5",
         "docs/productization-automation-operating-state.md#canonical-contract-after-this-audit",
-        "docs/zh/productization-automation-operating-state.md#本次审计后的规范契约"
+        "docs/zh/productization-automation-operating-state.md#\u672c\u6b21\u5ba1\u8ba1\u540e\u7684\u89c4\u8303\u5951\u7ea6"
       ],
       "clean_stop_condition": [
         "If the candidate requires a new architecture choice, leave it for human review rather than auto-create it.",
@@ -72,7 +72,8 @@
         ],
         "allowed_title_prefixes": [
           "PPTM [delivery availability gate]",
-          "PPTM [delivery availability verify]"
+          "PPTM [delivery availability verify]",
+          "PPTM [delivery availability remediation]"
         ],
         "spawn_title_prefix": "productization: manual delivery-availability chain",
         "autoclose_title_prefix": "productization: delivery availability gate:"
@@ -189,9 +190,9 @@
       },
       "doc_anchors": [
         "docs/productization-current-status.md#required-next-increment",
-        "docs/zh/productization-current-status.md#下一阶段",
+        "docs/zh/productization-current-status.md#\u4e0b\u4e00\u9636\u6bb5",
         "docs/productization-automation-operating-state.md#canonical-contract-after-this-audit",
-        "docs/zh/productization-automation-operating-state.md#本次审计后的规范契约"
+        "docs/zh/productization-automation-operating-state.md#\u672c\u6b21\u5ba1\u8ba1\u540e\u7684\u89c4\u8303\u5951\u7ea6"
       ],
       "clean_stop_condition": [
         "If the candidate requires a new architecture choice, leave it for human review rather than auto-create it.",
