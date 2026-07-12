@@ -65,6 +65,61 @@
       }
     },
     {
+      "lane_id": "delivery-availability",
+      "lane_identity": {
+        "predecessor_ids": [
+          "t_c9c80846"
+        ],
+        "allowed_title_prefixes": [
+          "PPTM [delivery availability gate]",
+          "PPTM [delivery availability verify]"
+        ],
+        "spawn_title_prefix": "productization: manual delivery-availability chain",
+        "autoclose_title_prefix": "productization: delivery availability gate:"
+      },
+      "successor_field_name": "prelinked_delivery_availability_successor",
+      "changed_file_policy": {
+        "allowed_prefixes": [
+          "productization/app/project-workbench-verified-export-composition.ts",
+          "productization/tests/project-workbench-verified-export-node-server.test.ts"
+        ]
+      },
+      "verification_command_policy": {
+        "allowed_commands": [
+          "npm run runtime:workbench-verified-export-node-server",
+          "npm run runtime:workbench-verified-export-http",
+          "npm run runtime:workbench-availability-gate",
+          "npm run runtime:staged-export-atomic-commit",
+          "npm run runtime:preview-export-richness",
+          "npm run productization:mainline",
+          "npx tsc -p tsconfig.json --noEmit",
+          "git diff --check"
+        ]
+      },
+      "autoclose_messages": {
+        "result": "auto-accepted delivery availability gate",
+        "summary": "Auto-closed after same-run workspace availability evidence validation."
+      },
+      "doc_anchors": [
+        "docs/productization-current-status.md#required-next-increment",
+        "docs/productization-autopilot-contract.md"
+      ],
+      "clean_stop_condition": [
+        "If workspace evidence is missing, stale, foreign-project, or cross-run, do not auto-close or continue.",
+        "If an asserted preview/export action lacks actual runtime evidence, do not auto-close or continue.",
+        "If changed files or commands leave this lane's allowlists, do not auto-close or continue."
+      ],
+      "human_decision_boundary": [
+        "PPT Master pipeline order change",
+        "Quality Check, post-processing, or production PPTX export claim",
+        "Security boundary or credential handling"
+      ],
+      "duplicate_suppression_key_choice": {
+        "strategy": "prelinked_dependency_only",
+        "reason": "This lane never infers a successor; its verifier is created and linked before implementation begins."
+      }
+    },
+    {
       "lane_id": "workbench-ui",
       "lane_identity": {
         "predecessor_ids": [
