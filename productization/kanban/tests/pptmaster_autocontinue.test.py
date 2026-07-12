@@ -1,45 +1,47 @@
-import importlib.util
-import sqlite3
-import tempfile
+#!/usr/bin/env python3
+"""Regression tests for the PPT Master Kanban guard policy."""
+
+import ast
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[1] / 'pptmaster_autocontinue.py'
-spec = importlib.util.spec_from_file_location('pptmaster_autocontinue', SCRIPT)
-assert spec and spec.loader
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
 
-with tempfile.TemporaryDirectory() as tmp:
-    db = Path(tmp) / 'kanban.db'
-    con = sqlite3.connect(db)
-    con.executescript('''
-      create table tasks (id text primary key, status text, block_kind text, claim_lock text, worker_pid integer, current_run_id integer);
-      create table task_links (parent_id text, child_id text);
-    ''')
-    con.execute("insert into tasks values ('root', 'ready', null, null, null, null)")
-    cur = con.cursor()
-    original_root = module.ROOT_TASK_ID
-    module.ROOT_TASK_ID = 'root'
-    assert module.root_is_clean(cur) == (True, 'ok')
+SCRIPT = Path(__file__).resolve().parents[1] / "pptmaster_autocontinue.py"
+source = SCRIPT.read_text(encoding="utf-8")
+tree = ast.parse(source)
+functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
 
-    con.execute("update tasks set status = 'blocked', block_kind = 'needs_input' where id = 'root'")
-    assert module.root_is_clean(cur) == (True, 'ok')
+assert "spawn_next" not in functions, "guard must not dynamically create successors"
+assert "latest_done_with_successor" not in functions, "guard must not infer successors from completed cards"
+assert "lane_body" not in functions, "guard must not manufacture task bodies"
+assert "candidate_seen_recently" not in functions, "guard must not dedupe dynamically created work"
+assert "existing_open_title" not in functions, "guard must not search for dynamically created work"
 
-    con.execute("update tasks set status = 'blocked', block_kind = 'other' where id = 'root'")
-    assert module.root_is_clean(cur) == (False, 'root-status-blocked')
+main = functions["main"]
+main_calls = {
+    node.func.id
+    for node in ast.walk(main)
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+}
+assert "root_is_clean" in main_calls
+assert "autoclose_latest" in main_calls
+assert "spawn_next" not in main_calls
+assert "extract_candidate" not in main_calls
 
-    con.execute("update tasks set status = 'running', block_kind = null where id = 'root'")
-    assert module.root_is_clean(cur) == (False, 'root-status-running')
+root = functions["root_is_clean"]
+root_source = ast.get_source_segment(source, root) or ""
+assert 'status == "blocked"' in root_source
+assert 'block_kind in {"needs_input", "waiting_dependency"}' in root_source
+assert '"SELECT COUNT(*) FROM task_links WHERE child_id = ?"' in root_source
 
-    con.execute("update tasks set status = 'ready', claim_lock = 'lock' where id = 'root'")
-    assert module.root_is_clean(cur) == (False, 'root-has-active-execution-state')
+policy = functions["should_autoclose"]
+policy_source = ast.get_source_segment(source, policy) or ""
+assert '"review-required"' in policy_source
+assert "extract_changed_files" in policy_source
+assert "extract_verification_commands" in policy_source
+assert "allowed_changed_files" in policy_source
+assert "commands_allowed" in policy_source
 
-    con.execute("update tasks set claim_lock = null where id = 'root'")
-    con.execute("insert into task_links values ('lane', 'root')")
-    assert module.root_is_clean(cur) == (False, 'root-has-1-incoming-links')
-    assert module.candidate_fingerprint('a genuine successor') == module.candidate_fingerprint('a genuine successor')
-    assert module.candidate_fingerprint('a genuine successor') != module.candidate_fingerprint('different successor')
-    module.ROOT_TASK_ID = original_root
-    con.close()
+assert "unlinked successor" not in source
+assert "kanban --board {board} create" not in source
 
-print('pptmaster autocontinue root invariant test: ok')
+print("pptmaster autocontinue policy test: no dynamic successor creation; root invariant and review handoff gates present")

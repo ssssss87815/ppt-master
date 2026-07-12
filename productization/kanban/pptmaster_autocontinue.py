@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 import json
+import os
 import re
 import sqlite3
-import os
 import subprocess
 from dataclasses import dataclass
-from hashlib import sha256
 from pathlib import Path
-from typing import Iterable, Any
+from typing import Iterable
 
 BOARD = os.environ.get("HERMES_KANBAN_BOARD", "ppt-master-productization-mainline")
 DB = Path(
@@ -52,20 +51,12 @@ def root_is_clean(cur) -> tuple[bool, str]:
 class LanePolicy:
     key: str
     predecessor_ids: frozenset[str]
-    spawn_title_prefix: str
     autoclose_title_prefix: str
     autoclose_result: str
     autoclose_summary: str
-    next_candidate_key: str
     verify_commands: tuple[str, ...]
     allowed_changed_prefixes: tuple[str, ...]
     allowed_title_prefixes: tuple[str, ...]
-    doc_anchors: tuple[str, ...]
-    clean_stop_condition: tuple[str, ...]
-    human_decision_boundary: tuple[str, ...]
-    duplicate_suppression_strategy: str
-    candidate_label: str
-    worker_handoff_note: str | None = None
 
 
 def sh(cmd: str):
@@ -123,92 +114,28 @@ def normalize_slug(text: str):
 
 def load_registry(path: Path) -> tuple[LanePolicy, ...]:
     raw = json.loads(path.read_text())
-    lanes: list[LanePolicy] = []
-    for item in raw.get("lanes", []):
+    lanes = []
+    for item in raw["lanes"]:
         identity = item["lane_identity"]
-        changed_policy = item["changed_file_policy"]
-        verification_policy = item["verification_command_policy"]
-        autoclose_messages = item["autoclose_messages"]
+        policy = item["changed_file_policy"]
+        verify = item["verification_command_policy"]
+        messages = item.get("autoclose_messages", {})
         lanes.append(
             LanePolicy(
                 key=str(item["lane_id"]),
-                predecessor_ids=frozenset(str(x) for x in identity.get("predecessor_ids", [])),
-                spawn_title_prefix=str(identity["spawn_title_prefix"]),
+                predecessor_ids=frozenset(str(x) for x in identity["predecessor_ids"]),
                 autoclose_title_prefix=str(identity["autoclose_title_prefix"]),
-                autoclose_result=str(autoclose_messages["result"]),
-                autoclose_summary=str(autoclose_messages["summary"]),
-                next_candidate_key=str(item["successor_field_name"]),
-                verify_commands=tuple(str(x) for x in verification_policy.get("allowed_commands", [])),
-                allowed_changed_prefixes=tuple(str(x) for x in changed_policy.get("allowed_prefixes", [])),
-                allowed_title_prefixes=tuple(str(x) for x in identity.get("allowed_title_prefixes", [])),
-                doc_anchors=tuple(str(REPO_ROOT / x) for x in item.get("doc_anchors", [])),
-                clean_stop_condition=tuple(str(x) for x in item.get("clean_stop_condition", [])),
-                human_decision_boundary=tuple(str(x) for x in item.get("human_decision_boundary", [])),
-                duplicate_suppression_strategy=str(item.get("duplicate_suppression_key_choice", {}).get("strategy", "normalized_successor_title")),
-                candidate_label=(
-                    "Current UI candidate from accepted handoff"
-                    if str(item["successor_field_name"]) == "next_smallest_ui_candidate"
-                    else "Current candidate from accepted handoff"
-                ),
-                worker_handoff_note=item.get("worker_handoff_note"),
+                autoclose_result=str(messages.get("result", f"auto-accepted {item['lane_id']} slice")),
+                autoclose_summary=str(messages.get("summary", "auto-closed after policy validation")),
+                verify_commands=tuple(str(x) for x in verify["allowed_commands"]),
+                allowed_changed_prefixes=tuple(str(x) for x in policy["allowed_prefixes"]),
+                allowed_title_prefixes=tuple(str(x) for x in identity["allowed_title_prefixes"]),
             )
         )
     return tuple(lanes)
 
 
 LANES = load_registry(REGISTRY_PATH)
-
-
-def latest_done_with_successor(cur, lane: LanePolicy):
-    rows = cur.execute(
-        """
-        SELECT t.id, t.title, t.completed_at, tr.summary, tr.metadata, c.body
-        FROM tasks t
-        LEFT JOIN task_runs tr ON tr.task_id = t.id AND tr.status = 'done'
-        LEFT JOIN task_comments c ON c.task_id = t.id
-        WHERE t.status = 'done' AND t.title LIKE ?
-        GROUP BY t.id, t.title, t.completed_at, tr.summary, tr.metadata, c.body, tr.ended_at, c.id
-        ORDER BY t.completed_at DESC, tr.ended_at DESC, c.id ASC
-        """,
-        (f"{lane.spawn_title_prefix}%",),
-    ).fetchall()
-    seen = set()
-    for row in rows:
-        blob = "\n".join(x for x in row[3:] if x)
-        candidate = extract_candidate(blob, lane.next_candidate_key)
-        if not candidate:
-            continue
-        marker = normalize_slug(candidate)
-        if marker in seen:
-            continue
-        seen.add(marker)
-        return row[0], row[1], blob
-
-    placeholders, params = sql_in_clause(lane.predecessor_ids)
-    rows = cur.execute(
-        f"""
-        SELECT t.id, t.title, t.completed_at, tr.summary, tr.metadata, c.body
-        FROM tasks t
-        LEFT JOIN task_runs tr ON tr.task_id = t.id AND tr.status = 'done'
-        LEFT JOIN task_comments c ON c.task_id = t.id
-        WHERE t.status = 'done' AND t.id IN ({placeholders})
-        GROUP BY t.id, t.title, t.completed_at, tr.summary, tr.metadata, c.body, tr.ended_at, c.id
-        ORDER BY t.completed_at DESC, tr.ended_at DESC, c.id ASC
-        """,
-        params,
-    ).fetchall()
-    seen = set()
-    for row in rows:
-        blob = "\n".join(x for x in row[3:] if x)
-        candidate = extract_candidate(blob, lane.next_candidate_key)
-        if not candidate:
-            continue
-        marker = normalize_slug(candidate)
-        if marker in seen:
-            continue
-        seen.add(marker)
-        return row[0], row[1], blob
-    return None
 
 
 def latest_autoclose_candidate(cur, lane: LanePolicy):
@@ -232,13 +159,14 @@ def latest_autoclose_candidate(cur, lane: LanePolicy):
         """,
         (ASSIGNEE,),
     ).fetchall()
-    for row in rows:
-        task_id, title, summary, body = row
+    for task_id, title, summary, body in rows:
         if not any(title.startswith(prefix) for prefix in lane.allowed_title_prefixes):
             continue
         blob = "\n".join(x for x in (summary, body) if x)
         ok, reason = should_autoclose(lane, title, blob)
-        return task_id, title, blob, extract_candidate(blob, lane.next_candidate_key), ok, reason
+        if ok:
+            return task_id, title, blob
+        print(f"[pptmaster-autoclose] {lane.key} rejected {task_id}: {reason}")
     return None
 
 
@@ -266,9 +194,6 @@ def should_autoclose(lane: LanePolicy, title: str, blob: str):
         return False, "title-family-mismatch"
     if "review-required" not in blob:
         return False, "missing-review-required"
-    candidate = extract_candidate(blob, lane.next_candidate_key)
-    if not candidate:
-        return False, f"missing-{lane.next_candidate_key}"
     changed = extract_changed_files(blob)
     if changed is None:
         return False, "missing-changed-files"
@@ -283,42 +208,12 @@ def should_autoclose(lane: LanePolicy, title: str, blob: str):
     return True, "ok"
 
 
-def existing_open_title(cur, marker):
-    row = cur.execute(
-        "SELECT id, status FROM tasks WHERE title LIKE ? AND status IN ('ready','running','blocked','todo','scheduled','triage') ORDER BY created_at DESC LIMIT 1",
-        (f"%{marker}%",),
-    ).fetchone()
-    return row
-
-
-def candidate_fingerprint(candidate_text: str) -> str:
-    return sha256(candidate_text.strip().encode('utf-8')).hexdigest()[:16]
-
-
-def candidate_seen_recently(cur, candidate_text: str, recent_limit=8):
-    fingerprint = candidate_fingerprint(candidate_text)
-    rows = cur.execute(
-        """
-        SELECT title, body, result
-        FROM tasks
-        WHERE title LIKE ? OR body LIKE ? OR result LIKE ?
-        ORDER BY coalesce(completed_at, created_at) DESC
-        LIMIT ?
-        """,
-        (f"%[candidate:{fingerprint}]%", f"%candidate_fingerprint={fingerprint}%", f"%candidate_fingerprint={fingerprint}%", recent_limit),
-    ).fetchall()
-    return len(rows) > 0
-
-
 def autoclose_latest(cur):
     for lane in LANES:
         picked = latest_autoclose_candidate(cur, lane)
         if not picked:
             continue
-        task_id, title, blob, successor, ok, reason = picked
-        if not ok:
-            print(f"[pptmaster-autoclose] {lane.key} rejected {task_id}: {reason}")
-            return None
+        task_id, title, blob = picked
         metadata = json.dumps(
             {
                 "accepted_by": "autoclose-policy",
@@ -345,76 +240,8 @@ def autoclose_latest(cur):
             print(res.stderr.strip() or res.stdout.strip())
             return "error"
         print(f"[pptmaster-autoclose] auto-closed {task_id} ({lane.key})")
-        if successor:
-            print(f"[pptmaster-autoclose] successor hint: {successor}")
         return task_id
     return None
-
-
-def lane_body(lane: LanePolicy, task_id: str, candidate: str):
-    anchors = "\n".join(f"- {x}" for x in lane.doc_anchors)
-    verify = "\n".join(f"- {x}" for x in lane.verify_commands)
-    stop = "\n".join(f"- {x}" for x in lane.clean_stop_condition)
-    human_boundary = "\n".join(f"- {x}" for x in lane.human_decision_boundary)
-    handoff_note = f"\nWorker handoff contract:\n- {lane.worker_handoff_note}\n" if lane.worker_handoff_note else ""
-    return f"""Doc anchors:
-{anchors}
-
-{lane.candidate_label}:
-- {candidate}
-
-Verification:
-{verify}
-
-Worker handoff contract:
-- Emit review-required handoff metadata with changed_files and verification_commands.
-- Emit successor field '{lane.next_candidate_key}' to allow declarative auto-next when the slice qualifies.{handoff_note}
-Clean stop condition:
-{stop}
-
-Human-decision boundary:
-{human_boundary}
-
-Read the latest accepted predecessor handoff on {task_id} before editing.
-Write changes only into {REPO_ROOT} repo.
-"""
-
-
-def spawn_next(cur):
-    for lane in LANES:
-        picked = latest_done_with_successor(cur, lane)
-        if not picked:
-            continue
-        task_id, task_title, blob = picked
-        candidate = extract_candidate(blob, lane.next_candidate_key)
-        if not candidate:
-            continue
-        marker = normalize_slug(candidate)
-        if existing_open_title(cur, marker):
-            continue
-        if candidate_seen_recently(cur, candidate):
-            print(f"[pptmaster-autocontinue] suppressing duplicate recent candidate from {task_id}: {candidate}")
-            continue
-        body = lane_body(lane, task_id, candidate)
-        fingerprint = candidate_fingerprint(candidate)
-        title = f"{lane.spawn_title_prefix}: {candidate} [{marker}] [candidate:{fingerprint}]"
-        body = f"candidate_fingerprint={fingerprint}\n{body}"
-        cmd = "{hermes} kanban --board {board} create {title} --assignee {assignee} --body {body}".format(
-            hermes=subprocess.list2cmdline([HERMES_BIN]),
-            board=BOARD,
-            title=subprocess.list2cmdline([title]),
-            assignee=ASSIGNEE,
-            body=subprocess.list2cmdline([body]),
-        )
-        res = sh(cmd)
-        if res.returncode != 0:
-            print("[pptmaster-autocontinue] create failed")
-            print(res.stderr.strip() or res.stdout.strip())
-            return 1
-        print(f"[pptmaster-autocontinue] spawned next card from {task_id} ({lane.key}): {candidate}")
-        print((res.stdout or res.stderr).strip())
-        return 0
-    return 0
 
 
 def main():
@@ -425,9 +252,11 @@ def main():
         print("[pptmaster-autocontinue] no kanban db; silent")
         return 0
 
-    # This process is deliberately a narrow no-agent guard.  Its only allowed
-    # effects are completing a qualifying review card and seeding one unlinked
-    # successor.  It never runs generic root recovery or task dispatch.
+    # This process is deliberately a narrow no-agent guard. Its only allowed
+    # effect is completing a qualifying review card. Hermes lifecycle and the
+    # pre-linked dependency graph decide which existing child becomes ready;
+    # this guard never creates or infers a successor, recovers the root, or
+    # dispatches work itself.
     con = sqlite3.connect(str(DB))
     cur = con.cursor()
     root_ok, root_reason = root_is_clean(cur)
@@ -442,25 +271,12 @@ def main():
     con.close()
     if autoclose_result == "error":
         return 1
-
-    # A completion changes the board. Re-open and verify root before the only
-    # other permitted effect (successor creation).  If no card was closed this
-    # tick, do not create work from historical cards; that prevents stale cards
-    # from re-seeding the mainline after a restart.
     if autoclose_result is None:
         print("[pptmaster-autocontinue] no qualifying review handoff; silent")
         return 0
 
-    con = sqlite3.connect(str(DB))
-    cur = con.cursor()
-    root_ok, root_reason = root_is_clean(cur)
-    if not root_ok:
-        con.close()
-        print(f"[pptmaster-autocontinue] root invariant changed; no successor: {root_reason}")
-        return 0
-    spawn_rc = spawn_next(cur)
-    con.close()
-    return spawn_rc
+    print(f"[pptmaster-autocontinue] auto-close accepted {autoclose_result}; successor must already be linked")
+    return 0
 
 
 if __name__ == '__main__':
