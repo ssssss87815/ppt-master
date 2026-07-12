@@ -74,7 +74,8 @@
           "PPTM [delivery availability gate]",
           "PPTM [delivery availability verify]",
           "PPTM [delivery availability remediation]",
-          "PPTM [delivery availability remediation verify]"
+          "PPTM [delivery availability remediation verify]",
+          "PPTM [delivery availability remediation review]"
         ],
         "spawn_title_prefix": "productization: manual delivery-availability chain",
         "autoclose_title_prefix": "productization: delivery availability gate:"
