@@ -1,6 +1,6 @@
 type Assert = (condition: boolean, message: string) => void;
 
-import { cpSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -52,20 +52,7 @@ function strategistArtifacts(project: ProjectRecord): ProductArtifactRef[] {
 }
 
 function makeWorkspaceFixture(projectId: string): { workspacePath: string; cleanup: () => void } {
-  const candidates = [
-    path.resolve('projects/low_carbon_life_ppt169_20260630'),
-    path.resolve('projects/low-carbon-living-science_ppt169_20260630'),
-  ];
-  const source = candidates.find(
-    (candidate) =>
-      existsSync(path.join(candidate, 'spec_lock.md')) &&
-      existsSync(path.join(candidate, 'design_spec.md')),
-  );
-
-  if (!source) {
-    throw new Error('No runtime-backed workspace fixture found for local phase orchestration test.');
-  }
-
+  const source = path.resolve('productization/test-fixtures/runtime-workspace');
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'ppt-orchestrator-local-phases-'));
   const workspacePath = path.join(tempRoot, projectId);
   cpSync(source, workspacePath, { recursive: true });

@@ -61,3 +61,19 @@ test('svg authoring runtime bridge falls back to first available svg when legacy
     rmSync(fixture.root, { recursive: true, force: true });
   }
 });
+
+test('svg authoring runtime bridge mutates again when the same run retries at the same timestamp', () => {
+  const fixture = createWorkspaceFixture();
+  const now = '2026-07-08T10:07:00.000Z';
+
+  try {
+    const first = runSvgAuthoringProbe(fixture.project, now);
+    const second = runSvgAuthoringProbe(fixture.project, now);
+
+    assert.equal(first.runtimeStatus, 'mutated');
+    assert.equal(second.runtimeStatus, 'mutated');
+    assert.notEqual(first.artifacts[0]?.metadata?.afterHash, second.artifacts[0]?.metadata?.afterHash);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});

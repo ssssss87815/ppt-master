@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -59,7 +59,7 @@ export function runSvgAuthoringProbe(
     const probeTarget = path.join(probeWorkspace, 'svg_output', targetBasename);
     const beforeContent = readFileSync(probeTarget, 'utf8');
     const beforeHash = sha256Of(probeTarget);
-    const annotationText = `productization runtime authoring probe ${now}`;
+    const annotationText = `productization runtime authoring probe ${now} ${randomUUID()}`;
 
     const script = `
 import json, re, subprocess, time, urllib.request

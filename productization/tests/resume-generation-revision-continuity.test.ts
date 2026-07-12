@@ -65,17 +65,13 @@ function main() {
       'revision_requested view should advertise the resume recovery action in the projected nextActions list',
     );
 
-    let localResumeRejected = false;
-    try {
-      runLocalResumePhase(revised.project, '2026-06-30T16:35:00.000Z');
-    } catch (error) {
-      localResumeRejected = true;
-      assert(
-        error instanceof Error && error.message.includes('SVG authoring runtime probe failed'),
-        'local resume should report the live SVG authoring probe blocker when the fixture does not mutate',
-      );
-    }
-    assert(localResumeRejected, 'local resume should stop honestly when the SVG authoring probe cannot verify mutation');
+    const localResumed = runLocalResumePhase(revised.project, '2026-06-30T16:35:00.000Z');
+    assert(localResumed.resumed.project.status === 'generation_in_progress', 'local resume should preserve generation-in-progress state after the first SVG authoring probe');
+    assert(localResumed.previewed.project.status === 'preview_available', 'local resume should reach preview after a second same-timestamp SVG authoring probe');
+    assert(
+      localResumed.previewed.artifacts.filter((artifact) => artifact.metadata?.verification === 'runtime_svg_authoring_probe').length === 1,
+      'local resume preview handoff should include live SVG authoring probe evidence',
+    );
 
     console.log('resume generation revision continuity test: ok');
   } finally {

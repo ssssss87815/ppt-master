@@ -259,6 +259,16 @@ export function syncPreviewArtifacts(
     throw new Error(`preview sync normalization failed: ${normalizedGeneration.note}`);
   }
 
+  const authoringProbe = runSvgAuthoringProbe(generationProject, now);
+  if (authoringProbe.runtimeStatus !== 'mutated') {
+    throw new Error(`Preview sync generation evidence passed, but SVG authoring probe failed: ${authoringProbe.note}`);
+  }
+
+  const refreshedGeneration = runGenerationFromWorkspace(generationProject, now);
+  if (refreshedGeneration.runtimeStatus !== 'generation_synced') {
+    throw new Error(`Preview sync SVG authoring probe mutated the workspace, but refreshed generation evidence failed: ${refreshedGeneration.note}`);
+  }
+
   const previewed = runPreviewFromWorkspace(generationProject, now);
   if (previewed.runtimeStatus !== 'preview_synced') {
     throw new Error(previewed.note);
@@ -276,9 +286,24 @@ export function syncPreviewArtifacts(
     nextProject.status,
     previewed.artifacts.map((item) => item.artifactId),
     now,
-    'Preview artifacts synced via runtime workspace preview bridge into product-facing workbench.',
+    'Preview artifacts synced only after live SVG authoring mutation and refreshed runtime generation evidence were handed off to the product-facing workbench.',
   );
-  const attached = attachPhaseCheckpoint(nextProject, previewCheckpoint, [...normalizedGeneration.artifacts, ...previewed.artifacts], now);
+  const refreshedGenerationArtifacts = refreshedGeneration.artifacts.map((artifact) => ({
+    ...artifact,
+    artifactId: `${artifact.artifactId}-refreshed-after-preview-authoring`,
+    label: `${artifact.label ?? 'Generation runtime evidence manifest'} (refreshed after preview authoring probe)`,
+    metadata: {
+      ...artifact.metadata,
+      verification: 'runtime_workspace_generation_bridge_refreshed_after_authoring',
+      refreshedAfterAuthoringProbe: true,
+    },
+  }));
+  const attached = attachPhaseCheckpoint(
+    nextProject,
+    previewCheckpoint,
+    [...normalizedGeneration.artifacts, ...authoringProbe.artifacts, ...refreshedGenerationArtifacts, ...previewed.artifacts],
+    now,
+  );
 
   return {
     project: attached.project,

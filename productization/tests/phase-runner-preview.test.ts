@@ -77,6 +77,8 @@ function main() {
     assert.ok(previewed.artifacts.some((item) => item.kind === 'preview_bundle'), 'preview sync should create preview bundle');
     assert.ok(previewed.artifacts.some((item) => item.kind === 'preview_page_svg'), 'preview sync should create preview svg');
     assert.ok(previewed.artifacts.some((item) => item.metadata?.verification === 'runtime_workspace_generation_bridge' && item.metadata?.role === 'generation_evidence'), 'preview sync should return normalization generation evidence');
+    assert.ok(previewed.artifacts.some((item) => item.metadata?.verification === 'runtime_svg_authoring_probe'), 'preview sync must gate the preview handoff through the live SVG authoring runtime');
+    assert.ok(previewed.artifacts.some((item) => item.metadata?.verification === 'runtime_workspace_generation_bridge_refreshed_after_authoring'), 'preview sync must refresh generation evidence after the authoring gate before handing off the preview');
 
     const completedMarker = manager.complete({
       projectId: project.projectId,
