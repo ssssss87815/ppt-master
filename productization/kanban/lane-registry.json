@@ -73,7 +73,8 @@
         "allowed_title_prefixes": [
           "PPTM [delivery availability gate]",
           "PPTM [delivery availability verify]",
-          "PPTM [delivery availability remediation]"
+          "PPTM [delivery availability remediation]",
+          "PPTM [delivery availability remediation verify]"
         ],
         "spawn_title_prefix": "productization: manual delivery-availability chain",
         "autoclose_title_prefix": "productization: delivery availability gate:"
