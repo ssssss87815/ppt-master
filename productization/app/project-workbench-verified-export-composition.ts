@@ -8,7 +8,9 @@ import type { ProjectRecord, WorkflowCheckpoint } from '../backend/models/projec
 import { runStagedExportThroughAtomicCommit } from '../backend/orchestrator/staged-export-commit.js';
 import type { ValidatedPreviewEvidence } from '../backend/adapter/staged-export-bridge.js';
 import {
+  FileExportPersistenceStateRepository,
   StateBackedExportPersistenceUnitOfWork,
+  type ExportPersistenceSeed,
   type ExportPersistenceSnapshot,
   type ExportPersistenceStateRepository,
 } from '../backend/state/export-persistence-unit-of-work.js';
@@ -16,6 +18,8 @@ import type { ProjectWorkbenchExportInput, ProjectWorkbenchExportResult } from '
 
 export type VerifiedExportWorkbenchOptions = {
   rootDir: string;
+  statePath?: string;
+  initialState?: ExportPersistenceSeed;
   now?: () => string;
   leaseDurationMs?: number;
 };
@@ -154,6 +158,23 @@ function durableDelivery(
  * a browser callback or a page projection.
  */
 export function createVerifiedExportWorkbenchDependencies(
+  state: ExportPersistenceStateRepository,
+  options: VerifiedExportWorkbenchOptions,
+): VerifiedExportWorkbenchDependencies {
+  return createVerifiedExportWorkbenchDependenciesFromState(state, options);
+}
+
+/** Creates a durable local Workbench composition that survives process restart. */
+export function createDurableVerifiedExportWorkbenchDependencies(
+  options: VerifiedExportWorkbenchOptions & { statePath: string; initialState: ExportPersistenceSeed },
+): VerifiedExportWorkbenchDependencies {
+  return createVerifiedExportWorkbenchDependenciesFromState(
+    new FileExportPersistenceStateRepository(options.statePath, options.initialState),
+    options,
+  );
+}
+
+function createVerifiedExportWorkbenchDependenciesFromState(
   state: ExportPersistenceStateRepository,
   options: VerifiedExportWorkbenchOptions,
 ): VerifiedExportWorkbenchDependencies {

@@ -7,9 +7,15 @@ import path from 'node:path';
 
 import { createProjectWorkbenchNodeServer } from '../app/project-workbench-node-server.ts';
 import { createVerifiedExportWorkbenchDependencies } from '../app/project-workbench-verified-export-composition.ts';
+import { startDurableVerifiedExportWorkbench } from '../app/project-workbench-verified-export-startup.ts';
 import type { ProductArtifactRef } from '../backend/models/artifacts.ts';
 import type { ProjectRecord, WorkflowCheckpoint } from '../backend/models/projects.ts';
-import { InMemoryExportPersistenceStateRepository, type ExportPersistenceSnapshot } from '../backend/state/export-persistence-unit-of-work.ts';
+import {
+  FileExportPersistenceStateRepository,
+  InMemoryExportPersistenceStateRepository,
+  type ExportPersistenceSnapshot,
+  type ExportPersistenceStateRepository,
+} from '../backend/state/export-persistence-unit-of-work.ts';
 
 const NOW = '2026-07-11T15:00:00.000Z';
 const PROJECT_ID = 'verified-export-node-http';
@@ -38,7 +44,7 @@ function seed(workspacePath: string, checkpointArtifactIds = ['preview-bundle', 
   };
 }
 
-async function start(state: InMemoryExportPersistenceStateRepository, rootDir: string) {
+async function start(state: ExportPersistenceStateRepository, rootDir: string) {
   const server = createProjectWorkbenchNodeServer(createVerifiedExportWorkbenchDependencies(state, { rootDir, now: () => NOW }));
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -47,9 +53,26 @@ async function start(state: InMemoryExportPersistenceStateRepository, rootDir: s
   return { server, origin: `http://127.0.0.1:${address.port}` };
 }
 
+async function startDurable(
+  statePath: string,
+  rootDir: string,
+  initialState: ExportPersistenceSnapshot = { projects: [], artifacts: [], checkpoints: [], attempts: [] },
+) {
+  return startDurableVerifiedExportWorkbench({
+    rootDir,
+    statePath,
+    initialState,
+    now: () => NOW,
+  });
+}
+
 async function stop(server: ReturnType<typeof createProjectWorkbenchNodeServer>) {
   server.close();
   await once(server, 'close');
+}
+
+async function stopStarted(started: Awaited<ReturnType<typeof startDurableVerifiedExportWorkbench>>) {
+  await started.close();
 }
 
 async function exportRequest(origin: string, idempotencyKey: string) {
@@ -61,16 +84,17 @@ async function main() {
   const workspace = path.join(root, 'workspace');
   cpSync(path.resolve('productization/test-fixtures/runtime-workspace'), workspace, { recursive: true });
   try {
-    const state = new InMemoryExportPersistenceStateRepository(seed(workspace));
-    const first = await start(state, root);
+    const statePath = path.join(root, 'state', 'workbench.json');
+    const first = await startDurable(statePath, root, seed(workspace));
     try {
       const success = await exportRequest(first.origin, 'idempotency-1');
       assert.equal(success.status, 200, 'production Node HTTP composition should return a committed export page');
       assert.match(await success.text(), /export_ready/);
     } finally {
-      await stop(first.server);
+      await stopStarted(first);
     }
 
+    const state = new FileExportPersistenceStateRepository(statePath, { projects: [] });
     const durable = state.snapshot();
     assert.equal(durable.projects[0]?.status, 'export_ready', 'fresh state must expose the committed project');
     assert.equal(durable.attempts[0]?.status, 'completed', 'fresh state must expose the completed export attempt');
@@ -80,13 +104,14 @@ async function main() {
     const durablePptx = path.resolve(root, primary.storageKey);
     assert.ok(existsSync(durablePptx), 'completed state must point at a readable PPTX');
 
-    const replayable = await start(state, root);
+    const coldRestartState = new FileExportPersistenceStateRepository(statePath, { projects: [] });
+    const replayable = await startDurable(statePath, root);
     try {
       const reuse = await exportRequest(replayable.origin, 'idempotency-1');
       assert.equal(reuse.status, 200, 'a restarted HTTP composition should reuse a revalidated durable idempotent delivery');
-      assert.equal(state.snapshot().attempts.length, 1, 'idempotent reuse must not publish a second attempt');
+      assert.equal(coldRestartState.snapshot().attempts.length, 1, 'cold restart reuse must not publish a second attempt');
     } finally {
-      await stop(replayable.server);
+      await stopStarted(replayable);
     }
 
     rmSync(durablePptx);

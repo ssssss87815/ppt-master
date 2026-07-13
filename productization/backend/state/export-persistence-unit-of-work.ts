@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import * as path from 'node:path';
+
 import type { ProductArtifactRef } from '../models/artifacts.ts';
 import type { ExportAttempt, ExportDelivery, ExportRejection } from '../models/export-attempt.ts';
 import type { ProjectRecord, WorkflowCheckpoint } from '../models/projects.ts';
@@ -57,7 +61,7 @@ export type ExportPersistenceStateRepository = {
 };
 
 type FailurePoint = 'project' | 'artifacts' | 'checkpoint' | 'attempt';
-type Seed = Pick<ExportPersistenceSnapshot, 'projects'> & Partial<Omit<ExportPersistenceSnapshot, 'projects'>>;
+export type ExportPersistenceSeed = Pick<ExportPersistenceSnapshot, 'projects'> & Partial<Omit<ExportPersistenceSnapshot, 'projects'>>;
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -89,7 +93,7 @@ function deliveryFrom(attempt: ExportAttempt): ExportDelivery {
 export class InMemoryExportPersistenceStateRepository implements ExportPersistenceStateRepository {
   private state: ExportPersistenceSnapshot;
 
-  constructor(seed: Seed) {
+  constructor(seed: ExportPersistenceSeed) {
     this.state = {
       projects: clone(seed.projects),
       artifacts: clone(seed.artifacts ?? []),
@@ -107,6 +111,65 @@ export class InMemoryExportPersistenceStateRepository implements ExportPersisten
     const result = operation(draft);
     this.state = draft;
     return clone(result);
+  }
+}
+
+/**
+ * Local durable state for the Workbench entrypoint. A completed transaction is
+ * atomically published as a full JSON snapshot, so a fresh process can resume
+ * only committed export state.
+ */
+export class FileExportPersistenceStateRepository implements ExportPersistenceStateRepository {
+  private state: ExportPersistenceSnapshot;
+
+  constructor(private readonly statePath: string, seed: ExportPersistenceSeed) {
+    this.state = existsSync(statePath)
+      ? this.readPersistedSnapshot()
+      : {
+        projects: clone(seed.projects),
+        artifacts: clone(seed.artifacts ?? []),
+        checkpoints: clone(seed.checkpoints ?? []),
+        attempts: clone(seed.attempts ?? []),
+      };
+    if (!existsSync(statePath)) {
+      this.persist(this.state);
+    }
+  }
+
+  snapshot(): ExportPersistenceSnapshot {
+    return clone(this.state);
+  }
+
+  transaction<T>(operation: (draft: ExportPersistenceSnapshot) => T): T {
+    const draft = clone(this.state);
+    const result = operation(draft);
+    this.persist(draft);
+    this.state = draft;
+    return clone(result);
+  }
+
+  private readPersistedSnapshot(): ExportPersistenceSnapshot {
+    const parsed: unknown = JSON.parse(readFileSync(this.statePath, 'utf8'));
+    const snapshot = parsed as Partial<ExportPersistenceSnapshot>;
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(snapshot.projects)
+      || !Array.isArray(snapshot.artifacts) || !Array.isArray(snapshot.checkpoints)
+      || !Array.isArray(snapshot.attempts)) {
+      throw new Error('export persistence state is malformed');
+    }
+    return clone(snapshot as ExportPersistenceSnapshot);
+  }
+
+  private persist(snapshot: ExportPersistenceSnapshot): void {
+    mkdirSync(path.dirname(this.statePath), { recursive: true });
+    const temporaryPath = `${this.statePath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(temporaryPath, JSON.stringify(snapshot), { encoding: 'utf8', mode: 0o600 });
+      renameSync(temporaryPath, this.statePath);
+    } finally {
+      if (existsSync(temporaryPath)) {
+        rmSync(temporaryPath, { force: true });
+      }
+    }
   }
 }
 
@@ -250,7 +313,7 @@ export class InMemoryExportPersistenceStore {
   private readonly state: InMemoryExportPersistenceStateRepository;
   private readonly unitOfWork: StateBackedExportPersistenceUnitOfWork;
 
-  constructor(seed: Seed, options: { failOn?: FailurePoint } = {}) {
+  constructor(seed: ExportPersistenceSeed, options: { failOn?: FailurePoint } = {}) {
     this.state = new InMemoryExportPersistenceStateRepository(seed);
     this.unitOfWork = new StateBackedExportPersistenceUnitOfWork(this.state, options);
   }
