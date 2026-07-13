@@ -35,6 +35,7 @@ export type WorkflowCheckpointStage =
   | 'generation_started'
   | 'generation_resumed'
   | 'preview_synced'
+  | 'quality_checked'
   | 'revision_requested'
   | 'export_ready';
 

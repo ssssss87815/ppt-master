@@ -10,6 +10,7 @@ export type ProductArtifactKind =
   | 'image_manifest'
   | 'preview_page_svg'
   | 'preview_bundle'
+  | 'quality_report'
   | 'export_pptx'
   | 'runtime_log';
 

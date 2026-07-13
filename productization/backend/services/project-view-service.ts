@@ -60,6 +60,7 @@ function stageTitle(stage: WorkflowCheckpoint['stage']): string {
     generation_started: 'Generation Started',
     generation_resumed: 'Generation Resumed',
     preview_synced: 'Preview synced',
+    quality_checked: 'Quality checked',
     revision_requested: 'Revision requested',
     export_ready: 'Export ready',
   }[stage];
@@ -410,6 +411,7 @@ function nextActionsFor(
   strategistHandoff: StrategistHandoffViewModel | undefined,
   hasRuntimeBackedPreview: boolean,
   hasRuntimeBackedExport: boolean,
+  qualityStatus: NonNullable<ProjectViewModel['qualityCheck']>['status'],
 ): ProjectViewModel['nextActions'] {
   if (project.status === 'draft') {
     return ['import_sources'];
@@ -432,6 +434,10 @@ function nextActionsFor(
   }
 
   if (project.status === 'generation_in_progress' && hasRuntimeBackedExport) {
+    return ['export_pptx'];
+  }
+
+  if (project.status === 'preview_available' && hasRuntimeBackedPreview && qualityStatus === 'ready_to_run') {
     return ['export_pptx'];
   }
 
@@ -661,6 +667,33 @@ export function toProjectViewModel(
   const latestExportArtifact = exportIsRuntimeBacked ? candidateExportArtifact : undefined;
   const previewIsRuntimeBacked = hasCompletedCheckpointForCurrentRunArtifacts(currentRunCheckpoints, 'preview_synced', previewArtifacts)
     || exportIsRuntimeBacked;
+  const qualityReports = artifacts.filter((artifact) => artifact.kind === 'quality_report' && artifact.runId === project.lastRunId);
+  const readyQualityReports = qualityReports.filter((artifact) => artifact.status === 'ready');
+  const qualityCheckpoints = currentRunCheckpoints.filter((checkpoint) => checkpoint.stage === 'quality_checked');
+  const qualityPassed = readyQualityReports.length === 1
+    && typeof readyQualityReports[0]?.metadata?.sha256 === 'string'
+    && qualityCheckpoints.some((checkpoint) => checkpoint.status === 'completed' && checkpoint.artifactIds.length === 1 && checkpoint.artifactIds[0] === readyQualityReports[0]?.artifactId);
+  const qualityFailed = qualityReports.some((artifact) => artifact.status === 'failed')
+    || qualityCheckpoints.some((checkpoint) => checkpoint.status === 'failed');
+  const qualityStatus: NonNullable<ProjectViewModel['qualityCheck']>['status'] = qualityPassed
+    ? 'passed'
+    : qualityFailed
+      ? 'failed'
+      : project.status === 'preview_available' && previewIsRuntimeBacked
+        ? 'ready_to_run'
+        : 'not_ready';
+  const qualityCheck: NonNullable<ProjectViewModel['qualityCheck']> = {
+    status: qualityStatus,
+    summary: qualityStatus === 'passed'
+      ? 'Current-run Quality Check passed.'
+      : qualityStatus === 'failed'
+        ? 'Current-run Quality Check failed. Review the report and revise or retry.'
+        : qualityStatus === 'ready_to_run'
+          ? 'Verified current-run preview is ready for Quality Check.'
+          : 'Quality Check is unavailable until a verified current-run preview exists.',
+    action: qualityStatus === 'ready_to_run' ? 'run_quality_check' : undefined,
+    reportArtifactId: readyQualityReports[0]?.artifactId ?? qualityReports[0]?.artifactId,
+  };
   const previewBundle = previewIsRuntimeBacked ? candidatePreviewBundle : undefined;
   const previewPageArtifacts = previewIsRuntimeBacked ? candidatePreviewPageArtifacts : [];
   const confirmationResultArtifact = latestArtifactByKind(artifacts, 'confirmation_result');
@@ -799,6 +832,7 @@ export function toProjectViewModel(
     strategistHandoff,
     previewIsRuntimeBacked,
     exportIsRuntimeBacked,
+    qualityStatus,
   );
   const artifactSummary = buildArtifactSummary(artifacts);
 
@@ -902,6 +936,7 @@ export function toProjectViewModel(
     },
     timeline,
     nextActions,
+    qualityCheck,
     latestPreviewUrl,
     latestExportUrl,
     preview,

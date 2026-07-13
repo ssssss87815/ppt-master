@@ -87,8 +87,15 @@ export type ProjectViewModel = {
     | 'start_generation'
     | 'resume_generation'
     | 'request_revision'
+    | 'run_quality_check'
     | 'export_pptx'
   >;
+  qualityCheck?: {
+    status: 'not_ready' | 'ready_to_run' | 'passed' | 'failed' | 'unavailable_or_ambiguous';
+    summary: string;
+    action?: 'run_quality_check';
+    reportArtifactId?: string;
+  };
   latestPreviewUrl?: string;
   latestExportUrl?: string;
   preview?: PreviewViewModel;
