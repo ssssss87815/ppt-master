@@ -495,6 +495,107 @@ function hasCompletedCheckpointForCurrentRunArtifacts(
   return (checkpoints ?? []).some((checkpoint) => hasCompletedCheckpointForArtifacts(checkpoint, stage, artifacts));
 }
 
+type CompletedCheckpointArtifactSelection<T> =
+  | { status: 'found'; value: T }
+  | { status: 'ambiguous' }
+  | { status: 'absent' };
+
+function uniqueArtifactsById(artifacts: ProductArtifactRef[]): Map<string, ProductArtifactRef[]> {
+  const artifactsById = new Map<string, ProductArtifactRef[]>();
+
+  for (const artifact of artifacts) {
+    const matchingArtifacts = artifactsById.get(artifact.artifactId) ?? [];
+    matchingArtifacts.push(artifact);
+    artifactsById.set(artifact.artifactId, matchingArtifacts);
+  }
+
+  return artifactsById;
+}
+
+function checkpointArtifactsFromCurrentRun(
+  checkpoint: WorkflowCheckpoint,
+  artifactsById: Map<string, ProductArtifactRef[]>,
+): CompletedCheckpointArtifactSelection<ProductArtifactRef[]> {
+  const checkpointArtifacts: ProductArtifactRef[] = [];
+  const referencedArtifactIds = new Set<string>();
+
+  for (const artifactId of checkpoint.artifactIds) {
+    if (referencedArtifactIds.has(artifactId)) {
+      return { status: 'ambiguous' };
+    }
+    referencedArtifactIds.add(artifactId);
+
+    const matchingArtifacts = artifactsById.get(artifactId) ?? [];
+    if (matchingArtifacts.length > 1) {
+      return { status: 'ambiguous' };
+    }
+    if (matchingArtifacts.length === 1) {
+      checkpointArtifacts.push(matchingArtifacts[0]);
+    }
+  }
+
+  return { status: 'found', value: checkpointArtifacts };
+}
+
+function previewArtifactsFromCompletedCheckpoint(
+  checkpoints: WorkflowCheckpoint[],
+  readyCurrentRunArtifacts: ProductArtifactRef[],
+): CompletedCheckpointArtifactSelection<{ bundle: ProductArtifactRef; pages: ProductArtifactRef[] }> {
+  const artifactsById = uniqueArtifactsById(readyCurrentRunArtifacts);
+
+  for (const checkpoint of [...checkpoints].sort((left, right) => right.createdAt.localeCompare(left.createdAt))) {
+    if (checkpoint.stage !== 'preview_synced' || checkpoint.status !== 'completed') {
+      continue;
+    }
+
+    const checkpointArtifactSelection = checkpointArtifactsFromCurrentRun(checkpoint, artifactsById);
+    if (checkpointArtifactSelection.status === 'ambiguous') {
+      return checkpointArtifactSelection;
+    }
+
+    const checkpointArtifacts = checkpointArtifactSelection.value;
+    const bundle = checkpointArtifacts.find((artifact) => artifact.kind === 'preview_bundle');
+
+    if (bundle) {
+      return {
+        status: 'found',
+        value: {
+          bundle,
+          pages: checkpointArtifacts.filter((artifact) => artifact.kind === 'preview_page_svg'),
+        },
+      };
+    }
+  }
+
+  return { status: 'absent' };
+}
+
+function exportArtifactFromCompletedCheckpoint(
+  checkpoints: WorkflowCheckpoint[],
+  readyCurrentRunArtifacts: ProductArtifactRef[],
+): CompletedCheckpointArtifactSelection<ProductArtifactRef> {
+  const artifactsById = uniqueArtifactsById(readyCurrentRunArtifacts);
+
+  for (const checkpoint of [...checkpoints].sort((left, right) => right.createdAt.localeCompare(left.createdAt))) {
+    if (checkpoint.stage !== 'export_ready' || checkpoint.status !== 'completed') {
+      continue;
+    }
+
+    const checkpointArtifactSelection = checkpointArtifactsFromCurrentRun(checkpoint, artifactsById);
+    if (checkpointArtifactSelection.status === 'ambiguous') {
+      return checkpointArtifactSelection;
+    }
+
+    const exportArtifact = checkpointArtifactSelection.value.find((artifact) => artifact.kind === 'export_pptx');
+
+    if (exportArtifact) {
+      return { status: 'found', value: exportArtifact };
+    }
+  }
+
+  return { status: 'absent' };
+}
+
 export function toProjectViewModel(
   project: ProjectRecord,
   artifacts: ProductArtifactRef[],
@@ -506,16 +607,31 @@ export function toProjectViewModel(
   const artifactStorageKeyById = new Map(artifacts.map((artifact) => [artifact.artifactId, artifact.storageKey]));
   const sources = buildSources(artifacts);
   const readyCurrentRunArtifacts = artifacts.filter((artifact) => isCurrentReadyRuntimeArtifact(project, artifact));
-  const candidatePreviewBundle = latestArtifactByKind(readyCurrentRunArtifacts, 'preview_bundle');
-  const candidatePreviewPageArtifacts = sortArtifactsNewestFirst(readyCurrentRunArtifacts)
-    .filter((artifact) => artifact.kind === 'preview_page_svg');
-  const previewArtifacts = candidatePreviewBundle
-    ? [candidatePreviewBundle, ...candidatePreviewPageArtifacts]
-    : [];
-  const candidateExportArtifact = latestArtifactByKind(readyCurrentRunArtifacts, 'export_pptx');
   const currentRunCheckpoints = checkpoints ?? [latestCheckpoint].filter(
     (checkpoint): checkpoint is WorkflowCheckpoint => Boolean(checkpoint),
   );
+  const checkpointPreviewArtifactSelection = previewArtifactsFromCompletedCheckpoint(currentRunCheckpoints, readyCurrentRunArtifacts);
+  const checkpointPreviewArtifacts = checkpointPreviewArtifactSelection.status === 'found'
+    ? checkpointPreviewArtifactSelection.value
+    : undefined;
+  const candidatePreviewBundle = checkpointPreviewArtifactSelection.status === 'ambiguous'
+    ? undefined
+    : checkpointPreviewArtifacts?.bundle
+      ?? latestArtifactByKind(readyCurrentRunArtifacts, 'preview_bundle');
+  const candidatePreviewPageArtifacts = checkpointPreviewArtifactSelection.status === 'ambiguous'
+    ? []
+    : checkpointPreviewArtifacts?.pages
+      ?? sortArtifactsNewestFirst(readyCurrentRunArtifacts)
+        .filter((artifact) => artifact.kind === 'preview_page_svg');
+  const previewArtifacts = candidatePreviewBundle
+    ? [candidatePreviewBundle, ...candidatePreviewPageArtifacts]
+    : [];
+  const checkpointExportArtifactSelection = exportArtifactFromCompletedCheckpoint(currentRunCheckpoints, readyCurrentRunArtifacts);
+  const candidateExportArtifact = checkpointExportArtifactSelection.status === 'ambiguous'
+    ? undefined
+    : checkpointExportArtifactSelection.status === 'found'
+      ? checkpointExportArtifactSelection.value
+      : latestArtifactByKind(readyCurrentRunArtifacts, 'export_pptx');
   const exportIsRuntimeBacked = candidateExportArtifact
     ? hasCompletedCheckpointForCurrentRunArtifacts(currentRunCheckpoints, 'export_ready', [candidateExportArtifact])
     : false;

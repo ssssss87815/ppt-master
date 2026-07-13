@@ -126,6 +126,56 @@ function main() {
   assert.equal(previewView.preview?.pageCount, 1, 'completed runtime preview checkpoint should expose current-run preview artifacts');
   assert.equal(previewView.nextActions.includes('export_pptx'), true, 'completed runtime preview checkpoint should expose the adjacent export action');
 
+  const duplicatePreviewBundle = artifact('preview_bundle', {
+    artifactId: 'duplicate-preview-bundle',
+    storageKey: 'projects/runtime-availability-gate/preview/duplicate-index.json',
+    createdAt: '2026-07-11T10:00:00.000Z',
+  });
+  const duplicatePreviewPage = artifact('preview_page_svg', {
+    artifactId: 'duplicate-preview-page',
+    pageKey: 'page-1',
+    storageKey: 'projects/runtime-availability-gate/svg_output/duplicate-page-1.svg',
+    createdAt: '2026-07-11T10:00:00.000Z',
+  });
+  const previewWithDuplicateArtifacts = toProjectViewModel(
+    project('preview_available'),
+    [previewBundle, previewPage, duplicatePreviewBundle, duplicatePreviewPage],
+    [],
+    previewCheckpoint,
+  );
+  assert.equal(
+    previewWithDuplicateArtifacts.preview?.latestPreviewUrl,
+    '/projects/runtime-availability-gate/preview_bundle',
+    'completed preview checkpoint must select its own bundle rather than a newer duplicate artifact',
+  );
+  assert.deepEqual(
+    previewWithDuplicateArtifacts.preview?.items.map((item) => item.artifactId),
+    [previewBundle.artifactId, previewPage.artifactId],
+    'completed preview checkpoint must expose only the artifacts it attests',
+  );
+
+  assertUnavailable(
+    'duplicate preview artifact identity in a completed checkpoint',
+    'preview_available',
+    [
+      previewBundle,
+      previewPage,
+      artifact('preview_page_svg', {
+        artifactId: previewPage.artifactId,
+        pageKey: 'page-1',
+        storageKey: 'projects/runtime-availability-gate/svg_output/duplicate-identity-page-1.svg',
+      }),
+    ],
+    previewCheckpoint,
+  );
+
+  assertUnavailable(
+    'duplicate preview artifact reference in a completed checkpoint',
+    'preview_available',
+    [previewBundle, previewPage],
+    checkpoint('preview_synced', 'completed', [previewBundle.artifactId, previewPage.artifactId, previewPage.artifactId]),
+  );
+
   const newerUnrelatedCheckpoint = checkpoint('generation_started', 'completed', [], {
     checkpointId: 'newer-unrelated-checkpoint',
     createdAt: '2026-07-11T10:00:00.000Z',
@@ -155,6 +205,46 @@ function main() {
   });
   const exportView = toProjectViewModel(project('export_ready'), [previewBundle, previewPage, exportPptx], [], exportCheckpoint);
   assert.equal(exportView.export?.latestExportUrl, '/projects/runtime-availability-gate/export_pptx', 'completed runtime export checkpoint should expose the current-run PPTX artifact');
+
+  const duplicateExport = artifact('export_pptx', {
+    artifactId: 'duplicate-export',
+    storageKey: 'projects/runtime-availability-gate/exports/duplicate.pptx',
+    createdAt: '2026-07-11T11:00:00.000Z',
+  });
+  const exportWithDuplicateArtifact = toProjectViewModel(
+    project('export_ready'),
+    [previewBundle, previewPage, exportPptx, duplicateExport],
+    [],
+    exportCheckpoint,
+  );
+  assert.equal(
+    exportWithDuplicateArtifact.export?.latestExportUrl,
+    '/projects/runtime-availability-gate/export_pptx',
+    'completed export checkpoint must select its own PPTX rather than a newer duplicate artifact',
+  );
+
+  assertUnavailable(
+    'duplicate export artifact identity in a completed checkpoint',
+    'export_ready',
+    [
+      exportPptx,
+      artifact('export_pptx', {
+        artifactId: exportPptx.artifactId,
+        storageKey: 'projects/runtime-availability-gate/exports/duplicate-identity.pptx',
+      }),
+    ],
+    exportCheckpoint,
+  );
+
+  assertUnavailable(
+    'duplicate export artifact reference in a completed checkpoint',
+    'export_ready',
+    [exportPptx],
+    checkpoint('export_ready', 'completed', [exportPptx.artifactId, exportPptx.artifactId], {
+      statusBefore: 'preview_available',
+      statusAfter: 'export_ready',
+    }),
+  );
 
   const exportWithNewerCheckpoint = toProjectViewModel(
     project('export_ready'),
