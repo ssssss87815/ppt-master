@@ -176,6 +176,21 @@ function main() {
     checkpoint('preview_synced', 'completed', [previewBundle.artifactId, previewPage.artifactId, previewPage.artifactId]),
   );
 
+  assertUnavailable(
+    'distinct preview artifacts with the same page key in a completed checkpoint',
+    'preview_available',
+    [
+      previewBundle,
+      previewPage,
+      artifact('preview_page_svg', {
+        artifactId: 'same-page-key-preview-page',
+        pageKey: previewPage.pageKey,
+        storageKey: 'projects/runtime-availability-gate/svg_output/same-page-key-page-1.svg',
+      }),
+    ],
+    checkpoint('preview_synced', 'completed', [previewBundle.artifactId, previewPage.artifactId, 'same-page-key-preview-page']),
+  );
+
   const newerUnrelatedCheckpoint = checkpoint('generation_started', 'completed', [], {
     checkpointId: 'newer-unrelated-checkpoint',
     createdAt: '2026-07-11T10:00:00.000Z',
@@ -241,6 +256,22 @@ function main() {
     'export_ready',
     [exportPptx],
     checkpoint('export_ready', 'completed', [exportPptx.artifactId, exportPptx.artifactId], {
+      statusBefore: 'preview_available',
+      statusAfter: 'export_ready',
+    }),
+  );
+
+  assertUnavailable(
+    'distinct export artifacts in a completed checkpoint',
+    'export_ready',
+    [
+      exportPptx,
+      artifact('export_pptx', {
+        artifactId: 'second-export-pptx',
+        storageKey: 'projects/runtime-availability-gate/exports/second.pptx',
+      }),
+    ],
+    checkpoint('export_ready', 'completed', [exportPptx.artifactId, 'second-export-pptx'], {
       statusBefore: 'preview_available',
       statusAfter: 'export_ready',
     }),

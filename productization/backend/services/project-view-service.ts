@@ -554,14 +554,27 @@ function previewArtifactsFromCompletedCheckpoint(
     }
 
     const checkpointArtifacts = checkpointArtifactSelection.value;
-    const bundle = checkpointArtifacts.find((artifact) => artifact.kind === 'preview_bundle');
+    const bundles = checkpointArtifacts.filter((artifact) => artifact.kind === 'preview_bundle');
+    const pages = checkpointArtifacts.filter((artifact) => artifact.kind === 'preview_page_svg');
+    const pageKeys = new Set<string | undefined>();
+    const hasDuplicatePageKey = pages.some((page) => {
+      if (pageKeys.has(page.pageKey)) {
+        return true;
+      }
+      pageKeys.add(page.pageKey);
+      return false;
+    });
 
-    if (bundle) {
+    if (bundles.length > 1 || hasDuplicatePageKey) {
+      return { status: 'ambiguous' };
+    }
+
+    if (bundles.length === 1) {
       return {
         status: 'found',
         value: {
-          bundle,
-          pages: checkpointArtifacts.filter((artifact) => artifact.kind === 'preview_page_svg'),
+          bundle: bundles[0],
+          pages,
         },
       };
     }
@@ -586,10 +599,14 @@ function exportArtifactFromCompletedCheckpoint(
       return checkpointArtifactSelection;
     }
 
-    const exportArtifact = checkpointArtifactSelection.value.find((artifact) => artifact.kind === 'export_pptx');
+    const exportArtifacts = checkpointArtifactSelection.value.filter((artifact) => artifact.kind === 'export_pptx');
 
-    if (exportArtifact) {
-      return { status: 'found', value: exportArtifact };
+    if (exportArtifacts.length > 1) {
+      return { status: 'ambiguous' };
+    }
+
+    if (exportArtifacts.length === 1) {
+      return { status: 'found', value: exportArtifacts[0] };
     }
   }
 
