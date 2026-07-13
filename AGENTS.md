@@ -4,7 +4,16 @@ This file is the project entry point for general AI agents.
 
 **You MUST read [`skills/ppt-master/SKILL.md`](skills/ppt-master/SKILL.md) before any PPT generation task or repo modification.** This repository exists to generate presentations; SKILL.md is the authoritative workflow that owns project creation, role switching, serial execution, quality gates, post-processing, export, and every per-step command. The rest of this file only points to where related material lives — it never substitutes for SKILL.md.
 
-## Project Overview
+# Agent Engineering Tools
+
+For PPT project planning, implementation, verification, review, and shipping work, the required engineering toolset is:
+
+1. `ponytail` — keep work to the smallest viable, adjacent engineering slice; explicitly exclude unrelated refactors.
+2. `codebase` — inspect definitions, callers, impact surface, dependencies, and test coverage before editing; use the codebase graph/search tools where available.
+3. `agent-skills` — load and follow the phase-appropriate skill workflow (planning/specification, incremental implementation, TDD/verification, review, and shipping).
+
+Use all three as concrete, attributable evidence in Kanban task handoffs and reviews. They do not replace the PPT Master production workflow: `skills/ppt-master/SKILL.md` remains authoritative for presentation-production order, artifacts, and quality gates.
+
 
 PPT Master is an AI-driven presentation generation system. Multi-role collaboration (Strategist → Image_Generator → Executor) converts source documents (PDF/DOCX/URL/Markdown) into natively editable PPTX with real PowerPoint shapes (DrawingML).
 
