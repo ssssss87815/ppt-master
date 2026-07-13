@@ -88,6 +88,7 @@ export type ProjectViewModel = {
     | 'resume_generation'
     | 'request_revision'
     | 'run_quality_check'
+    | 'run_post_processing'
     | 'export_pptx'
   >;
   qualityCheck?: {

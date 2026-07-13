@@ -133,6 +133,10 @@ async function handleProjectActionPost(
     return handleQualityCheckSubmit(dependencies, projectId);
   }
 
+  if (action === 'run_post_processing') {
+    return handlePostProcessingSubmit(dependencies, projectId);
+  }
+
   if (action === 'export_pptx') {
     if (!dependencies.exportPptx) {
       return textResponse(400, 'Unsupported action: export_pptx');
@@ -141,6 +145,34 @@ async function handleProjectActionPost(
   }
 
   return textResponse(400, `Unsupported action: ${action}`);
+}
+
+async function handlePostProcessingSubmit(
+  dependencies: ProjectWorkbenchPageDependencies,
+  projectId: string,
+): Promise<ProjectWorkbenchHttpResponse> {
+  if (!dependencies.runPostProcessing) return textResponse(400, 'Unsupported action: run_post_processing');
+  let project: ProjectRecord | null;
+  let artifacts: ProductArtifactRef[];
+  let checkpoints: WorkflowCheckpoint[];
+  try {
+    [project, artifacts, checkpoints] = await Promise.all([
+      dependencies.projects.getById(projectId),
+      dependencies.artifacts.listByProjectId(projectId),
+      dependencies.checkpoints.listByProjectId(projectId),
+    ]);
+  } catch {
+    return htmlFailureResponse('Post-processing unavailable', 'Could not load the verified current-run Quality Check evidence.');
+  }
+  if (!project) return textResponse(404, 'Project not found');
+  try {
+    await dependencies.runPostProcessing({ project, artifacts, checkpoints });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return htmlFailureResponse('Post-processing unavailable', `Post-processing did not persist: ${message}`);
+  }
+  const page = await renderProjectWorkbenchPage(dependencies, projectId);
+  return { status: page.status, headers: { 'content-type': page.contentType }, body: page.body };
 }
 
 async function handleQualityCheckSubmit(
