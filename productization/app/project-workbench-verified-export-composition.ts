@@ -105,7 +105,27 @@ function deriveCurrentPreviewEvidence(snapshot: ExportPersistenceSnapshot, proje
   );
   const manifest = lockedArtifacts.find((artifact) => artifact.kind === 'preview_bundle');
   const previewArtifacts = lockedArtifacts.filter((artifact) => artifact.kind === 'preview_page_svg');
-  if (!manifest || !previewArtifacts.length || !hasCurrentWorkspacePreviewEvidence(previewArtifacts)) {
+  const qualityReports = projectArtifacts(snapshot, projectId).filter((artifact) =>
+    artifact.kind === 'quality_report'
+    && artifact.status === 'ready'
+    && artifact.runId === currentRunId
+    && artifact.metadata?.sourcePreviewCheckpointId === lockedPreviewCheckpoint.checkpointId
+    && artifact.metadata?.summary
+    && typeof artifact.metadata.summary === 'object'
+    && (artifact.metadata.summary as { passed?: unknown }).passed === true
+    && typeof artifact.metadata.sha256 === 'string'
+    && /^[a-f0-9]{64}$/i.test(artifact.metadata.sha256),
+  );
+  const qualityCheckpoint = checkpoints.find((checkpoint) =>
+    checkpoint.stage === 'quality_checked'
+    && checkpoint.status === 'completed'
+    && checkpoint.statusBefore === 'preview_available'
+    && checkpoint.statusAfter === 'preview_available'
+    && checkpoint.artifactIds.length === 1
+    && checkpoint.artifactIds[0] === qualityReports[0]?.artifactId,
+  );
+  if (!manifest || !previewArtifacts.length || !hasCurrentWorkspacePreviewEvidence(previewArtifacts)
+    || qualityReports.length !== 1 || !qualityCheckpoint) {
     return null;
   }
 

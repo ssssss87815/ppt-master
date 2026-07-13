@@ -4,6 +4,7 @@ import { handleStartGeneration } from '../backend/actions/start-generation.js';
 import { applySubmitConfirmations } from '../backend/actions/submit-confirmations.js';
 import { validateSubmitConfirmationsPayload } from '../backend/models/confirmations.js';
 import type { StartGenerationAction, SubmitConfirmationsAction } from '../backend/models/actions.js';
+import { hasVerifiedQualityCheck } from '../backend/adapter/quality-check-runtime-bridge.js';
 import type { ProductArtifactRef } from '../backend/models/artifacts.js';
 import type { ProjectRecord, WorkflowCheckpoint } from '../backend/models/projects.js';
 
@@ -240,6 +241,10 @@ async function handleExportPptxSubmit(
 
   if (project.status !== 'preview_available' && project.status !== 'export_ready') {
     return textResponse(400, 'Invalid transition: export_pptx requires preview_available status');
+  }
+
+  if (project.status === 'preview_available' && !hasVerifiedQualityCheck(project, artifacts, checkpoints)) {
+    return textResponse(400, 'Quality Check must pass against the current verified preview before export_pptx');
   }
 
   const idempotencyKey = typeof parsedBody.idempotencyKey === 'string' && parsedBody.idempotencyKey.length > 0

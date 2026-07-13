@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import * as path from 'node:path';
 
 import type { ProductArtifactRef } from '../models/artifacts';
-import type { ProjectRecord } from '../models/projects';
+import type { ProjectRecord, WorkflowCheckpoint } from '../models/projects';
 
 export type QualityCheckInput = {
   project: ProjectRecord;
@@ -57,6 +57,46 @@ function defaultRunner(input: QualityCheckInput, reportPath: string): QualityChe
   };
 }
 
+export function hasVerifiedQualityCheck(
+  project: ProjectRecord,
+  artifacts: ProductArtifactRef[],
+  checkpoints: WorkflowCheckpoint[],
+): boolean {
+  if (project.status !== 'preview_available' || !project.lastRunId) return false;
+
+  const previewCheckpoints = checkpoints.filter((checkpoint) =>
+    checkpoint.projectId === project.projectId
+    && checkpoint.stage === 'preview_synced'
+    && checkpoint.status === 'completed',
+  );
+  if (previewCheckpoints.length !== 1) return false;
+
+  const reports = artifacts.filter((artifact) => {
+    const summary = artifact.metadata?.summary;
+    return artifact.projectId === project.projectId
+      && artifact.kind === 'quality_report'
+      && artifact.status === 'ready'
+      && artifact.runId === project.lastRunId
+      && artifact.metadata?.sourcePreviewCheckpointId === previewCheckpoints[0]?.checkpointId
+      && typeof artifact.metadata?.sha256 === 'string'
+      && /^[a-f0-9]{64}$/i.test(artifact.metadata.sha256)
+      && !!summary
+      && typeof summary === 'object'
+      && (summary as { passed?: unknown }).passed === true;
+  });
+  if (reports.length !== 1) return false;
+
+  return checkpoints.some((checkpoint) =>
+    checkpoint.projectId === project.projectId
+    && checkpoint.stage === 'quality_checked'
+    && checkpoint.status === 'completed'
+    && checkpoint.statusBefore === 'preview_available'
+    && checkpoint.statusAfter === 'preview_available'
+    && checkpoint.artifactIds.length === 1
+    && checkpoint.artifactIds[0] === reports[0]?.artifactId,
+  );
+}
+
 export function runQualityCheckFromWorkspace(
   input: QualityCheckInput,
   now = new Date().toISOString(),
@@ -70,14 +110,18 @@ export function runQualityCheckFromWorkspace(
   const scanned = [...result.scannedFiles].sort();
   const scannedExactlyOnce = scanned.length === expected.length && scanned.every((file, index) => file === expected[index]);
   const passed = result.errors === 0 && scannedExactlyOnce;
+  const artifactId = `${input.project.projectId}-quality-report-${Date.parse(now)}`;
+  const checkpointId = `${input.project.projectId}-quality_checked-${Date.parse(now)}`;
+  const note = result.note ?? (passed ? 'Quality check passed.' : 'Quality check failed.');
   const body = {
     projectId: input.project.projectId,
     runId: input.project.lastRunId,
     sourcePreviewCheckpointId: input.sourcePreviewCheckpointId,
+    qualityCheckpointId: checkpointId,
     pageArtifactIds: input.pages.map((page) => page.artifactId),
     summary: { total: expected.length, warnings: result.warnings, errors: result.errors, passed },
     scannedFiles: result.scannedFiles,
-    note: result.note ?? (passed ? 'Quality check passed.' : 'Quality check failed.'),
+    note,
     createdAt: now,
   };
   writeFileSync(reportPath, JSON.stringify(body, null, 2), 'utf8');

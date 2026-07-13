@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
-import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -36,10 +36,17 @@ function seed(workspacePath: string, checkpointArtifactIds = ['preview-bundle', 
       metadata: { generationProvenance: { sha256: pageDigest } },
     },
   ];
+  const qualityReport = {
+    ...artifact('quality-report', 'quality_report'),
+    metadata: { sourcePreviewCheckpointId: 'preview-locked', summary: { passed: true }, sha256: 'a'.repeat(64) },
+  };
   return {
-    projects: [{ projectId: PROJECT_ID, name: 'Verified export Node HTTP', status: 'preview_available', workspace: { projectId: PROJECT_ID, workspacePath }, lastRunId: RUN_ID, latestCheckpointId: 'preview-locked', createdAt: NOW, updatedAt: NOW }],
-    artifacts,
-    checkpoints: [{ checkpointId: 'preview-locked', projectId: PROJECT_ID, stage: 'preview_synced', status: 'completed', statusBefore: 'generation_in_progress', statusAfter: 'preview_available', artifactIds: checkpointArtifactIds, createdAt: NOW }],
+    projects: [{ projectId: PROJECT_ID, name: 'Verified export Node HTTP', status: 'preview_available', workspace: { projectId: PROJECT_ID, workspacePath }, lastRunId: RUN_ID, latestCheckpointId: 'quality-checked', createdAt: NOW, updatedAt: NOW }],
+    artifacts: [...artifacts, qualityReport],
+    checkpoints: [
+      { checkpointId: 'preview-locked', projectId: PROJECT_ID, stage: 'preview_synced', status: 'completed', statusBefore: 'generation_in_progress', statusAfter: 'preview_available', artifactIds: checkpointArtifactIds, createdAt: NOW },
+      { checkpointId: 'quality-checked', projectId: PROJECT_ID, stage: 'quality_checked', status: 'completed', statusBefore: 'preview_available', statusAfter: 'preview_available', artifactIds: [qualityReport.artifactId], createdAt: NOW },
+    ],
     attempts: [],
   };
 }
@@ -171,8 +178,8 @@ async function main() {
       assert.equal(failed.status, 500, 'filesystem persistence failure must not return delivery');
       const rolledBack = failureState.snapshot();
       assert.equal(rolledBack.projects[0]?.status, 'preview_available');
-      assert.equal(rolledBack.artifacts.length, 2);
-      assert.equal(rolledBack.checkpoints.length, 1);
+      assert.equal(rolledBack.artifacts.length, 3);
+      assert.equal(rolledBack.checkpoints.length, 2);
       assert.equal(rolledBack.attempts[0]?.status, 'failed_recoverable');
     } finally {
       await stop(failing.server);

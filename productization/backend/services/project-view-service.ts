@@ -438,10 +438,10 @@ function nextActionsFor(
   }
 
   if (project.status === 'preview_available' && hasRuntimeBackedPreview && qualityStatus === 'ready_to_run') {
-    return ['export_pptx'];
+    return ['run_quality_check'];
   }
 
-  if (project.status === 'preview_available' && hasRuntimeBackedPreview && !hasRuntimeBackedExport) {
+  if (project.status === 'preview_available' && hasRuntimeBackedPreview && qualityStatus === 'passed' && !hasRuntimeBackedExport) {
     return ['export_pptx'];
   }
 
@@ -669,10 +669,20 @@ export function toProjectViewModel(
     || exportIsRuntimeBacked;
   const qualityReports = artifacts.filter((artifact) => artifact.kind === 'quality_report' && artifact.runId === project.lastRunId);
   const readyQualityReports = qualityReports.filter((artifact) => artifact.status === 'ready');
+  const previewCheckpoints = currentRunCheckpoints.filter((checkpoint) => checkpoint.stage === 'preview_synced' && checkpoint.status === 'completed');
   const qualityCheckpoints = currentRunCheckpoints.filter((checkpoint) => checkpoint.stage === 'quality_checked');
-  const qualityPassed = readyQualityReports.length === 1
+  const qualityPassed = previewCheckpoints.length === 1
+    && readyQualityReports.length === 1
+    && readyQualityReports[0]?.metadata?.sourcePreviewCheckpointId === previewCheckpoints[0]?.checkpointId
     && typeof readyQualityReports[0]?.metadata?.sha256 === 'string'
-    && qualityCheckpoints.some((checkpoint) => checkpoint.status === 'completed' && checkpoint.artifactIds.length === 1 && checkpoint.artifactIds[0] === readyQualityReports[0]?.artifactId);
+    && /^[a-f0-9]{64}$/i.test(readyQualityReports[0]?.metadata?.sha256)
+    && typeof readyQualityReports[0]?.metadata?.summary === 'object'
+    && (readyQualityReports[0]?.metadata?.summary as { passed?: unknown }).passed === true
+    && qualityCheckpoints.some((checkpoint) => checkpoint.status === 'completed'
+      && checkpoint.statusBefore === 'preview_available'
+      && checkpoint.statusAfter === 'preview_available'
+      && checkpoint.artifactIds.length === 1
+      && checkpoint.artifactIds[0] === readyQualityReports[0]?.artifactId);
   const qualityFailed = qualityReports.some((artifact) => artifact.status === 'failed')
     || qualityCheckpoints.some((checkpoint) => checkpoint.status === 'failed');
   const qualityStatus: NonNullable<ProjectViewModel['qualityCheck']>['status'] = qualityPassed

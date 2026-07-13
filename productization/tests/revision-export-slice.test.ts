@@ -66,7 +66,7 @@ function main() {
     const exportArtifacts: ProductArtifactRef[] = [...previewed.artifacts, ...revised.artifacts, ...resumed.artifacts, ...resumedPreview.artifacts, ...exported.artifacts];
 
     const previewView = toProjectViewModel(previewed.project, previewArtifacts, [], previewed.checkpoints[0]);
-    assert.deepEqual(previewView.nextActions, ['export_pptx'], 'preview_available should suggest export only');
+    assert.deepEqual(previewView.nextActions, ['run_quality_check'], 'preview_available should require Quality Check before export');
 
     const revisionView = toProjectViewModel(revised.project, revisionArtifacts, [], revised.checkpoints[0]);
     assert.equal(revisionView.latestCheckpoint?.stage, 'revision_requested', 'revision view should surface latest checkpoint stage');

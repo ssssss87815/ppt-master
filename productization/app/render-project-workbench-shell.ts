@@ -96,6 +96,8 @@ function formatActionLabel(action: string): string {
 
 function formatActionDetail(action: string): string {
   switch (action) {
+    case 'run_quality_check':
+      return 'Run the required Quality Check against the verified current preview before PPTX export can begin.';
     case 'submit_confirmations':
       return 'Capture and lock the eight confirmations so the strategist handoff can proceed.';
     case 'start_generation':
@@ -111,6 +113,8 @@ function formatActionDetail(action: string): string {
 
 function formatActionOwner(action: string): string {
   switch (action) {
+    case 'run_quality_check':
+      return 'Quality Check bridge';
     case 'submit_confirmations':
       return 'Operator input';
     case 'start_generation':
@@ -130,7 +134,7 @@ function isActionableAction(project: ProjectViewModel, action: string): boolean 
 }
 
 function actionAvailabilityMessage(project: ProjectViewModel, action: string): string {
-  if (action === 'export_pptx') {
+  if (action === 'export_pptx' || action === 'run_quality_check') {
     return 'Runtime action unavailable in this read-only workbench.';
   }
 

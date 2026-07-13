@@ -124,7 +124,8 @@ function main() {
   const previewCheckpoint = checkpoint('preview_synced', 'completed', [previewBundle.artifactId, previewPage.artifactId]);
   const previewView = toProjectViewModel(project('preview_available'), [previewBundle, previewPage], [], previewCheckpoint);
   assert.equal(previewView.preview?.pageCount, 1, 'completed runtime preview checkpoint should expose current-run preview artifacts');
-  assert.equal(previewView.nextActions.includes('export_pptx'), true, 'completed runtime preview checkpoint should expose the adjacent export action');
+  assert.equal(previewView.qualityCheck?.status, 'ready_to_run', 'completed runtime preview checkpoint should require Quality Check before export');
+  assert.deepEqual(previewView.nextActions, ['run_quality_check'], 'completed runtime preview checkpoint should surface Quality Check as the only next action');
 
   const duplicatePreviewBundle = artifact('preview_bundle', {
     artifactId: 'duplicate-preview-bundle',
@@ -209,9 +210,9 @@ function main() {
     'a newer unrelated checkpoint must not hide completed current-run preview evidence',
   );
   assert.equal(
-    previewWithNewerCheckpoint.nextActions.includes('export_pptx'),
+    previewWithNewerCheckpoint.nextActions.includes('run_quality_check'),
     true,
-    'a newer unrelated checkpoint must not hide the export action backed by current-run preview evidence',
+    'a newer unrelated checkpoint must not hide the Quality Check action backed by current-run preview evidence',
   );
 
   const exportCheckpoint = checkpoint('export_ready', 'completed', [exportPptx.artifactId], {
