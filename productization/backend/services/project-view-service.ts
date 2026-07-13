@@ -549,8 +549,11 @@ function previewArtifactsFromCompletedCheckpoint(
     }
 
     const checkpointArtifactSelection = checkpointArtifactsFromCurrentRun(checkpoint, artifactsById);
-    if (checkpointArtifactSelection.status === 'ambiguous') {
-      return checkpointArtifactSelection;
+    if (checkpointArtifactSelection.status !== 'found') {
+      if (checkpointArtifactSelection.status === 'ambiguous') {
+        return checkpointArtifactSelection;
+      }
+      continue;
     }
 
     const checkpointArtifacts = checkpointArtifactSelection.value;
@@ -595,8 +598,11 @@ function exportArtifactFromCompletedCheckpoint(
     }
 
     const checkpointArtifactSelection = checkpointArtifactsFromCurrentRun(checkpoint, artifactsById);
-    if (checkpointArtifactSelection.status === 'ambiguous') {
-      return checkpointArtifactSelection;
+    if (checkpointArtifactSelection.status !== 'found') {
+      if (checkpointArtifactSelection.status === 'ambiguous') {
+        return checkpointArtifactSelection;
+      }
+      continue;
     }
 
     const exportArtifacts = checkpointArtifactSelection.value.filter((artifact) => artifact.kind === 'export_pptx');

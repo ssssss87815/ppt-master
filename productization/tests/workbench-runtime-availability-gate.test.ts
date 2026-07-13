@@ -149,7 +149,7 @@ function main() {
     'completed preview checkpoint must select its own bundle rather than a newer duplicate artifact',
   );
   assert.deepEqual(
-    previewWithDuplicateArtifacts.preview?.items.map((item) => item.artifactId),
+    previewWithDuplicateArtifacts.preview?.items?.map((item) => item.artifactId),
     [previewBundle.artifactId, previewPage.artifactId],
     'completed preview checkpoint must expose only the artifacts it attests',
   );
