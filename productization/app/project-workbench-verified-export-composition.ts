@@ -6,6 +6,8 @@ import type { ProductArtifactRef } from '../backend/models/artifacts.js';
 import type { ExportDelivery } from '../backend/models/export-attempt.js';
 import type { ProjectRecord, WorkflowCheckpoint } from '../backend/models/projects.js';
 import { runStagedExportThroughAtomicCommit } from '../backend/orchestrator/staged-export-commit.js';
+import { runQualityCheckPhase } from '../backend/orchestrator/phase-runner.js';
+import type { QualityCheckRunnerResult } from '../backend/adapter/quality-check-runtime-bridge.js';
 import type { ValidatedPreviewEvidence } from '../backend/adapter/staged-export-bridge.js';
 import {
   FileExportPersistenceStateRepository,
@@ -22,6 +24,12 @@ export type VerifiedExportWorkbenchOptions = {
   initialState?: ExportPersistenceSeed;
   now?: () => string;
   leaseDurationMs?: number;
+  qualityCheckRunner?: (input: {
+    project: ProjectRecord;
+    sourcePreviewCheckpointId: string;
+    bundle: ProductArtifactRef;
+    pages: ProductArtifactRef[];
+  }) => QualityCheckRunnerResult;
 };
 
 export type VerifiedExportWorkbenchDependencies = {
@@ -39,6 +47,11 @@ export type VerifiedExportWorkbenchDependencies = {
     create(checkpoint: WorkflowCheckpoint): Promise<WorkflowCheckpoint>;
   };
   exportPptx(input: ProjectWorkbenchExportInput): Promise<ProjectWorkbenchExportResult>;
+  runQualityCheck(input: { project: ProjectRecord; artifacts: ProductArtifactRef[]; checkpoints: WorkflowCheckpoint[] }): Promise<{
+    project: ProjectRecord;
+    artifacts: ProductArtifactRef[];
+    checkpoints: WorkflowCheckpoint[];
+  }>;
 };
 
 function clone<T>(value: T): T {
@@ -267,6 +280,29 @@ function createVerifiedExportWorkbenchDependenciesFromState(
         throw new Error('verified export did not commit a durable delivery');
       }
       return durableDelivery(state.snapshot(), result.delivery, result.kind, options.rootDir);
+    },
+    async runQualityCheck(input) {
+      const timestamp = now();
+      return state.transaction((draft) => {
+        const project = draft.projects.find((item) => item.projectId === input.project.projectId);
+        if (!project) throw new Error('project does not exist');
+        const result = runQualityCheckPhase(
+          project,
+          projectArtifacts(draft, project.projectId),
+          projectCheckpoints(draft, project.projectId),
+          timestamp,
+          options.qualityCheckRunner ? { run: options.qualityCheckRunner } : {},
+        );
+        const projectIndex = draft.projects.findIndex((item) => item.projectId === project.projectId);
+        draft.projects[projectIndex] = clone(result.project);
+        draft.artifacts.push(...clone(result.artifacts));
+        draft.checkpoints.push(...clone(result.checkpoints));
+        return {
+          project: clone(result.project),
+          artifacts: clone(result.artifacts),
+          checkpoints: clone(result.checkpoints),
+        };
+      });
     },
   };
 }

@@ -128,13 +128,14 @@ function formatActionOwner(action: string): string {
 }
 
 function isActionableAction(project: ProjectViewModel, action: string): boolean {
-  return action === 'submit_confirmations'
+  return action === 'run_quality_check'
+    || action === 'submit_confirmations'
     || action === 'start_generation'
     || (action === 'export_pptx' && project.workbench.exportAvailable === true);
 }
 
 function actionAvailabilityMessage(project: ProjectViewModel, action: string): string {
-  if (action === 'export_pptx' || action === 'run_quality_check') {
+  if (action === 'export_pptx') {
     return 'Runtime action unavailable in this read-only workbench.';
   }
 
@@ -1529,9 +1530,39 @@ export function renderProjectWorkbenchShell(project: ProjectViewModel): string {
       </section>
     </main>
     <script>
-      document.addEventListener('click', function (event) {
+      document.addEventListener('click', async function (event) {
         const target = event.target;
         if (!(target instanceof Element)) {
+          return;
+        }
+
+        const actionButton = target.closest('.next-action-button[data-action-code][data-project-id]');
+        if (actionButton instanceof HTMLButtonElement) {
+          const action = actionButton.dataset.actionCode;
+          const projectId = actionButton.dataset.projectId;
+          if (!action || !projectId) return;
+          actionButton.disabled = true;
+          try {
+            const payload = { action: action };
+            if (action === 'export_pptx') {
+              payload.idempotencyKey = typeof crypto.randomUUID === 'function'
+                ? crypto.randomUUID()
+                : String(Date.now());
+            }
+            const response = await fetch('/projects/' + encodeURIComponent(projectId), {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            const body = await response.text();
+            if (!response.ok) throw new Error(body || response.statusText);
+            document.open();
+            document.write(body);
+            document.close();
+          } catch (actionError) {
+            actionButton.disabled = false;
+            window.alert('Could not run ' + action + ': ' + (actionError instanceof Error ? actionError.message : String(actionError)));
+          }
           return;
         }
 

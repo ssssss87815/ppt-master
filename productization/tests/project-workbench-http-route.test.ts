@@ -200,7 +200,11 @@ async function main() {
   });
   assert.equal(exportEligibleView.status, 200, 'completed current-run preview evidence should project the required Quality Check action');
   assert.match(exportEligibleView.body, /data-action-code="run_quality_check"/, 'the workbench should expose Quality Check as the next projected action');
-  assert.match(exportEligibleView.body, /Runtime action unavailable in this read-only workbench\./, 'the workbench must describe Quality Check as unavailable rather than fabricate an execution control');
+  assert.match(
+    exportEligibleView.body,
+    /data-action-code="run_quality_check"[\s\S]*next-action-button[\s\S]*Run Quality Check/,
+    'the workbench must render an executable Quality Check control when the server owns the runtime action',
+  );
 
   const rejectedEligibleExport = await handleProjectWorkbenchHttpRequest(exportEligibleDependencies, {
     method: 'POST',

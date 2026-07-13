@@ -129,6 +129,10 @@ async function handleProjectActionPost(
     return handleStartGenerationSubmit(dependencies, projectId);
   }
 
+  if (action === 'run_quality_check') {
+    return handleQualityCheckSubmit(dependencies, projectId);
+  }
+
   if (action === 'export_pptx') {
     if (!dependencies.exportPptx) {
       return textResponse(400, 'Unsupported action: export_pptx');
@@ -137,6 +141,45 @@ async function handleProjectActionPost(
   }
 
   return textResponse(400, `Unsupported action: ${action}`);
+}
+
+async function handleQualityCheckSubmit(
+  dependencies: ProjectWorkbenchPageDependencies & {
+    runQualityCheck?: (input: {
+      project: ProjectRecord;
+      artifacts: ProductArtifactRef[];
+      checkpoints: WorkflowCheckpoint[];
+    }) => Promise<unknown>;
+  },
+  projectId: string,
+): Promise<ProjectWorkbenchHttpResponse> {
+  if (!dependencies.runQualityCheck) {
+    return textResponse(400, 'Unsupported action: run_quality_check');
+  }
+
+  let project: ProjectRecord | null;
+  let artifacts: ProductArtifactRef[];
+  let checkpoints: WorkflowCheckpoint[];
+  try {
+    [project, artifacts, checkpoints] = await Promise.all([
+      dependencies.projects.getById(projectId),
+      dependencies.artifacts.listByProjectId(projectId),
+      dependencies.checkpoints.listByProjectId(projectId),
+    ]);
+  } catch {
+    return htmlFailureResponse('Quality Check unavailable', 'Could not load the verified preview evidence.');
+  }
+  if (!project) return textResponse(404, 'Project not found');
+
+  try {
+    await dependencies.runQualityCheck({ project, artifacts, checkpoints });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return htmlFailureResponse('Quality Check unavailable', `Quality Check did not persist: ${message}`);
+  }
+
+  const page = await renderProjectWorkbenchPage(dependencies, projectId);
+  return { status: page.status, headers: { 'content-type': page.contentType }, body: page.body };
 }
 
 async function handleConfirmationsSubmit(
