@@ -6,6 +6,7 @@ export type ProjectStatus =
   | 'spec_ready'
   | 'generation_in_progress'
   | 'preview_available'
+  | 'post_processing'
   | 'revision_requested'
   | 'export_ready'
   | 'failed_recoverable'
@@ -19,6 +20,7 @@ export const PROJECT_STATUS_ORDER: ProjectStatus[] = [
   'spec_ready',
   'generation_in_progress',
   'preview_available',
+  'post_processing',
   'revision_requested',
   'export_ready',
   'failed_recoverable',
@@ -33,6 +35,7 @@ export const PROJECT_STATUS_DESCRIPTIONS: Record<ProjectStatus, string> = {
   spec_ready: 'Strategist outputs are materialized as product-visible design_spec and spec_lock artifacts, ready to gate generation entry.',
   generation_in_progress: 'Internal runtime orchestration is currently producing generation outputs.',
   preview_available: 'At least one preview artifact is available for product consumption.',
+  post_processing: 'Current-run final SVG and post-processing evidence are being prepared for verified export.',
   revision_requested: 'A generated result exists, but the user requested a revision before export.',
   export_ready: 'Exportable artifacts exist and are ready for delivery.',
   failed_recoverable: 'The workflow stopped with a recoverable failure and can be resumed or retried.',
@@ -46,9 +49,10 @@ export const PROJECT_STATUS_ALLOWED_TRANSITIONS: Record<ProjectStatus, ProjectSt
   confirmation_locked: ['spec_ready', 'failed_recoverable', 'failed_terminal'],
   spec_ready: ['generation_in_progress', 'failed_recoverable', 'failed_terminal'],
   generation_in_progress: ['preview_available', 'failed_recoverable', 'failed_terminal'],
-  preview_available: ['revision_requested', 'export_ready', 'failed_recoverable', 'failed_terminal'],
+  preview_available: ['post_processing', 'revision_requested', 'export_ready', 'failed_recoverable', 'failed_terminal'],
+  post_processing: ['export_ready', 'failed_recoverable', 'failed_terminal'],
   revision_requested: ['generation_in_progress', 'failed_recoverable', 'failed_terminal'],
   export_ready: ['failed_recoverable', 'failed_terminal'],
-  failed_recoverable: ['draft', 'sources_ready', 'confirmation_pending', 'confirmation_locked', 'spec_ready', 'generation_in_progress', 'preview_available', 'revision_requested', 'export_ready', 'failed_terminal'],
+  failed_recoverable: ['draft', 'sources_ready', 'confirmation_pending', 'confirmation_locked', 'spec_ready', 'generation_in_progress', 'preview_available', 'post_processing', 'revision_requested', 'export_ready', 'failed_terminal'],
   failed_terminal: [],
 };

@@ -54,17 +54,14 @@ function main() {
     assert.equal(resumed.project.status, 'generation_in_progress', 'resume should move back to generation_in_progress');
 
     const resumedPreview = syncPreviewArtifacts(resumed.project, '2026-06-30T16:37:00.000Z');
-    const exported = exportLocalPhase(resumedPreview.project, '2026-06-30T16:40:00.000Z');
-    assert.equal(exported.project.status, 'export_ready', 'export should move to export_ready');
-    assert.equal(exported.nextStatus, 'export_ready', 'export should expose nextStatus for orchestration consumers');
-    assert.ok(exported.artifacts.some((item) => item.kind === 'export_pptx'), 'export should create export_pptx artifact');
-    assert.ok(exported.artifacts.some((item) => item.kind === 'runtime_log' && item.storageKey.endsWith('.md')), 'export should create markdown companion artifact');
-    assert.ok(exported.artifacts.some((item) => item.kind === 'image_manifest'), 'export should create image manifest companion artifact');
+    assert.throws(
+      () => exportLocalPhase(resumedPreview.project, '2026-06-30T16:40:00.000Z'),
+      /local export is not a delivery path/,
+      'local export must fail closed instead of bypassing verified staged delivery',
+    );
 
     const previewArtifacts: ProductArtifactRef[] = [...previewed.artifacts];
     const revisionArtifacts: ProductArtifactRef[] = [...previewed.artifacts, ...revised.artifacts];
-    const exportArtifacts: ProductArtifactRef[] = [...previewed.artifacts, ...revised.artifacts, ...resumed.artifacts, ...resumedPreview.artifacts, ...exported.artifacts];
-
     const previewView = toProjectViewModel(previewed.project, previewArtifacts, [], previewed.checkpoints[0]);
     assert.deepEqual(previewView.nextActions, ['run_quality_check'], 'preview_available should require Quality Check before export');
 
@@ -81,15 +78,7 @@ function main() {
     assert.match(revisionHtml, /Tighten page 1 headline/);
     assert.match(revisionHtml, /resume_generation/);
 
-    const exportView = toProjectViewModel(exported.project, exportArtifacts, [], exported.checkpoints[0]);
-    assert.equal(exportView.nextActions.length, 0, 'export_ready should not suggest another action');
-    assert.ok((exportView.artifactSummary?.byKind?.export_pptx ?? 0) >= 1, 'export view should count export_pptx artifacts by kind');
-    assert.ok((exportView.artifactSummary?.byKind?.image_manifest ?? 0) >= 1, 'export view should count image_manifest artifacts by kind');
-    assert.ok((exportView.artifactSummary?.total ?? 0) >= exportArtifacts.length, 'export view should surface aggregate artifact totals');
-    assert.ok((exportView.latestExportUrl ?? '').endsWith('.pptx'), 'export view should expose pptx artifact storage key');
-    assert.ok(exportView.timeline.some((item) => item.key === 'export' && item.status === 'export_ready' && item.reached), 'timeline should include the reached export_ready stage');
-    assert.equal(exportView.latestCheckpoint?.stage, 'export_ready', 'export view should surface latest checkpoint stage');
-    assert.ok((exportView.export?.latestExportUrl ?? '').endsWith('.pptx'), 'export view should expose export.latestExportUrl as the pptx storage key');
+    console.log('revision export slice test: ok');
 
     console.log('revision/export slice test: ok');
   } finally {

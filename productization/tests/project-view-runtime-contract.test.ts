@@ -36,17 +36,18 @@ function main() {
     };
 
     const previewed = syncPreviewArtifacts(project, '2026-06-30T16:25:00.000Z');
-    const exported = exportLocalPhase(previewed.project, '2026-06-30T16:40:00.000Z');
-    const checkpoint = exported.checkpoints[0];
-    assert.ok(checkpoint, 'export phase should yield a checkpoint for project-view projection');
-
-    const view = toProjectViewModel(exported.project, [...previewed.artifacts, ...exported.artifacts], [], checkpoint);
+    assert.throws(
+      () => exportLocalPhase(previewed.project, '2026-06-30T16:40:00.000Z'),
+      /local export is not a delivery path/,
+      'local export must not create an unverified delivery for projection',
+    );
+    const view = toProjectViewModel(previewed.project, previewed.artifacts, [], previewed.checkpoints[0]);
 
     assert.equal(view.projectId, 'pptmaster-demo-project', 'project view should expose project id');
-    assert.equal(view.status, 'export_ready', 'project view should expose latest project status');
+    assert.equal(view.status, 'preview_available', 'project view should preserve the verified preview status before delivery');
     assert.ok(view.preview, 'project view should expose preview section');
-    assert.ok(view.export, 'project view should expose export section');
-    assert.ok(view.delivery, 'project view should expose delivery section');
+    assert.equal(view.export, undefined, 'project view should not invent an export section before verified delivery');
+    assert.equal(view.delivery, undefined, 'project view should not invent a delivery section before verified delivery');
 
     assert.equal(view.preview?.pageCount, 10, 'project view should expose preview page count from runtime bundle');
     assert.ok((view.preview?.latestPreviewUrl ?? '').endsWith('/preview/index.json'), 'project view should expose preview manifest url');
@@ -56,14 +57,6 @@ function main() {
     assert.ok((view.preview?.items ?? []).some((item) => item.artifactId === 'pptmaster-demo-project-page-1' && item.role === 'page' && item.pageKey === 'page-1'), 'project view should expose first preview page item');
     assert.ok((view.preview?.items ?? []).some((item) => item.artifactId === 'pptmaster-demo-project-page-1' && item.role === 'page' && item.generationProvenance?.filename === '01_封面｜低碳生活.svg'), 'project view should expose preview page generation provenance');
 
-    assert.ok((view.export?.latestExportUrl ?? '').endsWith('.pptx'), 'project view should expose export url');
-    assert.ok((view.export?.companionStorageKeys ?? []).some((key) => key.endsWith('.md')), 'project view should expose markdown companion storage key');
-    assert.ok((view.export?.companionStorageKeys ?? []).some((key) => key.endsWith('/image_manifest.json')), 'project view should expose image manifest companion storage key');
-
-    assert.equal(view.delivery?.primaryArtifactId, 'pptmaster-demo-project-export-pptx', 'delivery should point at primary pptx artifact');
-    assert.ok((view.delivery?.primaryStorageKey ?? '').endsWith('.pptx'), 'delivery should expose primary pptx storage key');
-    assert.ok((view.delivery?.companionArtifactIds ?? []).includes('pptmaster-demo-project-export-md'), 'delivery should include markdown companion artifact id');
-    assert.ok((view.delivery?.companionArtifactIds ?? []).includes('pptmaster-demo-project-image-manifest'), 'delivery should include image manifest artifact id');
 
     console.log('project-view runtime contract test: ok');
   } finally {

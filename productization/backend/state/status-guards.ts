@@ -8,6 +8,7 @@ const ORDERED_STATUSES: ProjectStatus[] = [
   'spec_ready',
   'generation_in_progress',
   'preview_available',
+  'post_processing',
   'revision_requested',
   'export_ready',
   'failed_recoverable',

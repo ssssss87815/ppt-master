@@ -128,9 +128,14 @@ function main() {
       'local resume should preserve existing run id into preview artifacts',
     );
 
-    const exported = runLocalExportPhase(generated.previewed.project, '2026-06-30T16:27:00.000Z');
-    assert(exported.project.status === 'export_ready', 'local export should move into export_ready');
-    assert(exported.artifacts.some((item) => item.kind === 'export_pptx'), 'local export should emit an export artifact');
+    let localExportRejected = false;
+    try {
+      runLocalExportPhase(generated.previewed.project, '2026-06-30T16:27:00.000Z');
+    } catch (error) {
+      localExportRejected = error instanceof Error
+        && error.message.includes('local export is not a delivery path');
+    }
+    assert(localExportRejected, 'local export must fail closed instead of bypassing verified staged delivery');
 
     console.log('workflow orchestrator local phases test: ok');
   } finally {

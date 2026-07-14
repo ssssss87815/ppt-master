@@ -24,6 +24,7 @@ const STATUS_TITLES: Record<ProjectStatus, string> = {
   spec_ready: 'Spec ready',
   generation_in_progress: 'Generation in progress',
   preview_available: 'Preview available',
+  post_processing: 'Post-processing final SVGs',
   revision_requested: 'Revision requested',
   export_ready: 'Export ready',
   failed_recoverable: 'Recoverable failure',
@@ -38,6 +39,7 @@ const STATUS_DESCRIPTIONS: Record<ProjectStatus, string> = {
   spec_ready: 'Strategist handoff artifacts are ready to gate generation entry.',
   generation_in_progress: 'Page generation is underway in the productized workflow.',
   preview_available: 'Preview artifacts are available for review.',
+  post_processing: 'Final SVG post-processing is verified; PPTX export is not yet available.',
   revision_requested: 'A revision was requested before export can proceed.',
   export_ready: 'Export and delivery artifacts are available.',
   failed_recoverable: 'The workflow paused on a recoverable failure and needs intervention.',
@@ -61,6 +63,7 @@ function stageTitle(stage: WorkflowCheckpoint['stage']): string {
     generation_resumed: 'Generation Resumed',
     preview_synced: 'Preview synced',
     quality_checked: 'Quality checked',
+    post_processed: 'Final SVGs post-processed',
     revision_requested: 'Revision requested',
     export_ready: 'Export ready',
   }[stage];
@@ -442,7 +445,11 @@ function nextActionsFor(
   }
 
   if (project.status === 'preview_available' && hasRuntimeBackedPreview && qualityStatus === 'passed' && !hasRuntimeBackedExport) {
-    return ['export_pptx'];
+    return ['run_post_processing'];
+  }
+
+  if (project.status === 'post_processing') {
+    return [];
   }
 
   return [];

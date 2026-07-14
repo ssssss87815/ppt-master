@@ -76,7 +76,7 @@ async function main() {
     const blocked = await runStagedExportThroughAtomicCommit(blockedStore.open(), request(rootDir, {
       invokeRuntime: () => { runtimeCalls += 1; throw new Error('runtime must not be invoked'); },
     }));
-    assert.deepEqual(blocked, { kind: 'rejected', reason: 'project_not_preview_available' });
+    assert.deepEqual(blocked, { kind: 'rejected', reason: 'project_not_post_processed' });
     assert.equal(runtimeCalls, 0, 'reservation rejection must happen before runtime staging');
 
     const failedStore = new InMemoryExportPersistenceStore({ projects: [preview().project] });

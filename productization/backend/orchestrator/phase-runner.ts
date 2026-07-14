@@ -5,11 +5,11 @@ import * as path from 'node:path';
 import type { ProductActionResult } from '../adapter/interface';
 import type { ProductArtifactRef } from '../models/artifacts';
 import type { ProjectRecord, RevisionRequestRecord, WorkflowCheckpoint } from '../models/projects';
-import { runExportFromWorkspace } from '../adapter/export-runtime-bridge';
 import { runGenerationFromWorkspace } from '../adapter/generation-runtime-bridge';
 import { runSvgAuthoringProbe } from '../adapter/svg-authoring-runtime-bridge';
 import { runPreviewFromWorkspace } from '../adapter/preview-runtime-bridge';
 import { runQualityCheckFromWorkspace, type QualityCheckRunnerResult } from '../adapter/quality-check-runtime-bridge';
+import { runPostProcessingFromWorkspace, type PostProcessingRunnerResult } from '../adapter/post-processing-runtime-bridge';
 
 export type StartGenerationResult = ProductActionResult & {
   checkpoints: WorkflowCheckpoint[];
@@ -469,6 +469,86 @@ export function runQualityCheckPhase(
   return { ...attached, checkpoints: [checkpoint], artifacts: [runtime.artifact] };
 }
 
+export function runPostProcessingPhase(
+  project: ProjectRecord,
+  artifacts: ProductArtifactRef[],
+  checkpoints: WorkflowCheckpoint[],
+  now = new Date().toISOString(),
+  options: { run?: (input: { project: ProjectRecord; sourcePreviewCheckpointId: string; sourceQualityCheckpointId: string; sourceQualityReportId: string; pages: ProductArtifactRef[] }) => PostProcessingRunnerResult } = {},
+): ProductActionResult & { checkpoints: WorkflowCheckpoint[]; artifacts: ProductArtifactRef[] } {
+  const fail = (note: string, runtimeArtifacts: ProductArtifactRef[] = []) => ({
+    project: { ...project, latestCheckpointId: `${project.projectId}-post_processed-${Date.parse(now)}`, lastError: note, updatedAt: now },
+    artifacts: runtimeArtifacts,
+    nextStatus: project.status,
+    checkpoints: [{
+      checkpointId: `${project.projectId}-post_processed-${Date.parse(now)}`,
+      projectId: project.projectId,
+      stage: 'post_processed' as const,
+      status: 'failed' as const,
+      statusBefore: project.status,
+      statusAfter: project.status,
+      artifactIds: runtimeArtifacts.map((artifact) => artifact.artifactId),
+      note,
+      createdAt: now,
+    }],
+  });
+  if (project.status !== 'preview_available' || !project.lastRunId) return fail('post-processing requires preview_available status and a current run identity');
+  const current = artifacts.filter((artifact) => artifact.projectId === project.projectId && artifact.runId === project.lastRunId && artifact.status === 'ready');
+  const previewCheckpoints = checkpoints.filter((checkpoint) => checkpoint.projectId === project.projectId && checkpoint.stage === 'preview_synced' && checkpoint.status === 'completed');
+  if (previewCheckpoints.length !== 1) return fail('post-processing requires exactly one completed preview checkpoint');
+  const previewCheckpoint = previewCheckpoints[0]!;
+  if (new Set(previewCheckpoint.artifactIds).size !== previewCheckpoint.artifactIds.length) return fail('post-processing preview checkpoint has duplicate artifact identities');
+  const selected = previewCheckpoint.artifactIds.map((artifactId) => current.filter((artifact) => artifact.artifactId === artifactId));
+  if (selected.some((matches) => matches.length !== 1)) return fail('post-processing preview evidence is missing, stale, or ambiguous');
+  const selectedArtifacts = selected.map((matches) => matches[0]!);
+  const pages = selectedArtifacts.filter((artifact) => artifact.kind === 'preview_page_svg');
+  if (selectedArtifacts.filter((artifact) => artifact.kind === 'preview_bundle').length !== 1 || pages.length === 0 || new Set(pages.map((page) => page.pageKey)).size !== pages.length) return fail('post-processing requires one bundle and distinct preview pages');
+  const qualityReports = current.filter((artifact) => artifact.kind === 'quality_report'
+    && artifact.metadata?.sourcePreviewCheckpointId === previewCheckpoint.checkpointId
+    && typeof artifact.metadata?.sha256 === 'string'
+    && /^[a-f0-9]{64}$/i.test(artifact.metadata.sha256)
+    && typeof artifact.metadata?.summary === 'object'
+    && (artifact.metadata.summary as { passed?: unknown }).passed === true);
+  const qualityCheckpoints = checkpoints.filter((checkpoint) => checkpoint.projectId === project.projectId && checkpoint.stage === 'quality_checked' && checkpoint.status === 'completed'
+    && checkpoint.statusBefore === 'preview_available' && checkpoint.statusAfter === 'preview_available'
+    && checkpoint.artifactIds.length === 1 && checkpoint.artifactIds[0] === qualityReports[0]?.artifactId);
+  if (qualityReports.length !== 1 || qualityCheckpoints.length !== 1) return fail('post-processing requires exactly one passed Quality Check bound to the current preview');
+  for (const page of pages) {
+    const filePath = path.resolve(page.storageKey);
+    const provenance = page.metadata?.generationProvenance as { sha256?: unknown } | undefined;
+    if (!filePath.startsWith(`${path.resolve(project.workspace.workspacePath)}${path.sep}`) || !filePath.includes(`${path.sep}svg_output${path.sep}`) || !existsSync(filePath)
+      || typeof provenance?.sha256 !== 'string' || createHash('sha256').update(readFileSync(filePath)).digest('hex') !== provenance.sha256) {
+      return fail(`post-processing preview page ${page.artifactId} has invalid current-run provenance`);
+    }
+  }
+  const runtime = runPostProcessingFromWorkspace({
+    project,
+    sourcePreviewCheckpointId: previewCheckpoint.checkpointId,
+    sourceQualityCheckpointId: qualityCheckpoints[0]!.checkpointId,
+    sourceQualityReportId: qualityReports[0]!.artifactId,
+    pages,
+  }, now, options.run ? (input) => options.run!(input) : undefined);
+  if (!runtime.passed) return fail(runtime.note, runtime.artifacts);
+  const report = runtime.artifacts.find((artifact) => artifact.kind === 'post_processing_report' && artifact.status === 'ready');
+  const bundle = runtime.artifacts.find((artifact) => artifact.kind === 'final_bundle' && artifact.status === 'ready');
+  const finalPages = runtime.artifacts.filter((artifact) => artifact.kind === 'final_page_svg' && artifact.status === 'ready');
+  if (!report || !bundle || finalPages.length !== pages.length || new Set(finalPages.map((page) => page.pageKey)).size !== pages.length) return fail('post-processing runtime did not persist an exact verified final roster', runtime.artifacts);
+  const nextProject: ProjectRecord = { ...project, status: 'post_processing', updatedAt: now };
+  const checkpoint: WorkflowCheckpoint = {
+    checkpointId: `${project.projectId}-post_processed-${Date.parse(now)}`,
+    projectId: project.projectId,
+    stage: 'post_processed',
+    status: 'completed',
+    statusBefore: project.status,
+    statusAfter: nextProject.status,
+    artifactIds: runtime.artifacts.map((artifact) => artifact.artifactId),
+    note: runtime.note,
+    createdAt: now,
+  };
+  const attached = attachPhaseCheckpoint(nextProject, checkpoint, runtime.artifacts, now);
+  return { ...attached, checkpoints: [checkpoint], artifacts: runtime.artifacts };
+}
+
 export function exportLocalPhase(
   project: ProjectRecord,
   now = new Date().toISOString(),
@@ -476,40 +556,9 @@ export function exportLocalPhase(
   checkpoints: WorkflowCheckpoint[];
   artifacts: ProductArtifactRef[];
 } {
-  if (project.status !== 'preview_available') {
-    throw new Error(`export phase requires preview_available status; received ${project.status}`);
-  }
-
-  const normalizedGeneration = runGenerationFromWorkspace(project, now);
-  if (normalizedGeneration.runtimeStatus !== 'generation_synced') {
-    throw new Error(`export normalization failed: ${normalizedGeneration.note}`);
-  }
-
-  const exported = runExportFromWorkspace(project, now);
-  if (exported.runtimeStatus !== 'exported') {
-    throw new Error(exported.note);
-  }
-
-  const nextProject: ProjectRecord = {
-    ...project,
-    status: 'export_ready',
-    updatedAt: now,
-  };
-  const exportCheckpoint = toWorkflowCheckpoint(
-    nextProject,
-    'export_ready',
-    project.status,
-    nextProject.status,
-    exported.artifacts.map((artifact) => artifact.artifactId),
-    now,
-    'Export artifacts prepared by the runtime export bridge.',
+  void project;
+  void now;
+  throw new Error(
+    'local export is not a delivery path; use the verified staged export after Quality Check and post-processing',
   );
-  const attached = attachPhaseCheckpoint(nextProject, exportCheckpoint, [...normalizedGeneration.artifacts, ...exported.artifacts], now);
-
-  return {
-    project: attached.project,
-    artifacts: attached.artifacts,
-    nextStatus: nextProject.status,
-    checkpoints: [exportCheckpoint],
-  };
 }

@@ -25,6 +25,16 @@ export type ProjectWorkbenchPageDependencies = {
   checkpoints: Pick<CheckpointRepository, 'listByProjectId' | 'getLatestByProjectId'> & Partial<Pick<CheckpointRepository, 'create'>>;
   /** Server-owned adapter; it must commit the verified export before returning. */
   exportPptx?: (input: ProjectWorkbenchExportInput) => Promise<ProjectWorkbenchExportResult>;
+  runQualityCheck?: (input: {
+    project: ProjectRecord;
+    artifacts: ProductArtifactRef[];
+    checkpoints: WorkflowCheckpoint[];
+  }) => Promise<unknown>;
+  runPostProcessing?: (input: {
+    project: ProjectRecord;
+    artifacts: ProductArtifactRef[];
+    checkpoints: WorkflowCheckpoint[];
+  }) => Promise<unknown>;
   loadRecommendations?: (projectId: string) => Promise<Array<{ key: string; title: string; recommendation: string }>>;
 };
 
