@@ -11,9 +11,9 @@ export type ProductArtifactKind =
   | 'preview_page_svg'
   | 'preview_bundle'
   | 'quality_report'
-  | 'post_processing_report'
   | 'final_page_svg'
   | 'final_bundle'
+  | 'post_processing_report'
   | 'export_pptx'
   | 'runtime_log';
 

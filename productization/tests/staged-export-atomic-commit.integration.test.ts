@@ -37,6 +37,18 @@ function preview() {
   return { project: project(), currentRunId: 'run-1', lockedPreviewCheckpoint, manifest, previewArtifacts: [page] };
 }
 
+function postProcessedPreview() {
+  const baseline = preview();
+  const project = { ...baseline.project, status: 'post_processing' as const, latestCheckpointId: 'post-processed' };
+  const manifest = { ...baseline.manifest, artifactId: 'final-bundle', kind: 'final_bundle' as const };
+  const page = { ...baseline.previewArtifacts[0]!, artifactId: 'final-page-1', kind: 'final_page_svg' as const };
+  const lockedPreviewCheckpoint: WorkflowCheckpoint = {
+    checkpointId: 'post-processed', projectId: PROJECT_ID, stage: 'post_processed', status: 'completed',
+    statusBefore: 'preview_available', statusAfter: 'post_processing', artifactIds: [manifest.artifactId, page.artifactId], createdAt: NOW,
+  };
+  return { project, currentRunId: 'run-1', lockedPreviewCheckpoint, manifest, previewArtifacts: [page] };
+}
+
 function request(rootDir: string, overrides: Partial<Parameters<typeof runStagedExportThroughAtomicCommit>[1]> = {}) {
   return {
     attemptId: 'attempt-1', projectId: PROJECT_ID, exportKey: EXPORT_KEY, idempotencyKey: 'idempotency-1', format: 'pptx' as const,
@@ -86,6 +98,12 @@ async function main() {
     const repeat = await runStagedExportThroughAtomicCommit(store.open(), request(rootDir, { attemptId: 'attempt-2', leaseOwner: 'worker-2' }));
     assert.equal(repeat.kind, 'completed', 'same export key must reuse the completed durable delivery');
     assert.equal(store.commitInvocationCount, 1, 'idempotent replay must not commit again');
+
+    const postProcessed = postProcessedPreview();
+    const postProcessedStore = new InMemoryExportPersistenceStore({ projects: [postProcessed.project] });
+    const finalDelivery = await runStagedExportThroughAtomicCommit(postProcessedStore.open(), request(rootDir, { preview: postProcessed }));
+    assert.equal(finalDelivery.kind, 'delivered', 'a post-processed final roster may commit a staged export');
+    assert.equal(postProcessedStore.open().snapshot().checkpoints[0]?.statusBefore, 'post_processing');
 
     const retryStore = new InMemoryExportPersistenceStore({ projects: [project()] });
     await runStagedExportThroughAtomicCommit(retryStore.open(), request(rootDir, {

@@ -125,7 +125,7 @@ export async function runStagedExportThroughAtomicCommit(
       projectId: request.projectId,
       stage: 'export_ready',
       status: 'completed',
-      statusBefore: 'preview_available',
+      statusBefore: request.preview.project.status,
       statusAfter: 'export_ready',
       artifactIds: artifacts.map((artifact) => artifact.artifactId),
       note: 'Staged export validated and committed atomically.',

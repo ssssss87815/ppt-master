@@ -79,18 +79,22 @@ export function excludeStagedArtifactsFromFreshRead(artifacts: ProductArtifactRe
 
 function validatePreview(evidence: ValidatedPreviewEvidence): string | null {
   const { project, currentRunId, lockedPreviewCheckpoint, manifest, previewArtifacts } = evidence;
-  if (project.status !== 'preview_available' || project.lastRunId !== currentRunId) {
-    return 'project is not the current preview_available run';
+  if ((project.status !== 'preview_available' && project.status !== 'post_processing') || project.lastRunId !== currentRunId) {
+    return 'project is not the current export-eligible run';
   }
+  const postProcessed = project.status === 'post_processing';
+  const expectedCheckpointStage = postProcessed ? 'post_processed' : 'preview_synced';
+  const expectedBundleKind = postProcessed ? 'final_bundle' : 'preview_bundle';
+  const expectedPageKind = postProcessed ? 'final_page_svg' : 'preview_page_svg';
   if (
     lockedPreviewCheckpoint.projectId !== project.projectId ||
-    lockedPreviewCheckpoint.stage !== 'preview_synced' ||
+    lockedPreviewCheckpoint.stage !== expectedCheckpointStage ||
     lockedPreviewCheckpoint.status !== 'completed'
   ) {
     return 'preview checkpoint is not a completed checkpoint for this project';
   }
-  if (manifest.projectId !== project.projectId || manifest.runId !== currentRunId || manifest.kind !== 'preview_bundle' || manifest.status !== 'ready') {
-    return 'preview manifest is not ready for the current run';
+  if (manifest.projectId !== project.projectId || manifest.runId !== currentRunId || manifest.kind !== expectedBundleKind || manifest.status !== 'ready') {
+    return 'export bundle is not ready for the current run';
   }
   if (!lockedPreviewCheckpoint.artifactIds.includes(manifest.artifactId)) {
     return 'preview checkpoint does not lock the preview manifest';
@@ -98,11 +102,11 @@ function validatePreview(evidence: ValidatedPreviewEvidence): string | null {
   if (!previewArtifacts.length || previewArtifacts.some((artifact) =>
     artifact.projectId !== project.projectId ||
     artifact.runId !== currentRunId ||
-    artifact.kind !== 'preview_page_svg' ||
+    artifact.kind !== expectedPageKind ||
     artifact.status !== 'ready' ||
     !lockedPreviewCheckpoint.artifactIds.includes(artifact.artifactId),
   )) {
-    return 'preview page artifacts are missing, stale, or cross-run';
+    return 'export page artifacts are missing, stale, or cross-run';
   }
   return null;
 }

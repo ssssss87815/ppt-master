@@ -314,11 +314,11 @@ async function handleExportPptxSubmit(
     return textResponse(404, 'Project not found');
   }
 
-  if (project.status !== 'preview_available' && project.status !== 'export_ready') {
-    return textResponse(400, 'Invalid transition: export_pptx requires preview_available status');
+  if (project.status !== 'preview_available' && project.status !== 'post_processing' && project.status !== 'export_ready') {
+    return textResponse(400, 'Invalid transition: export_pptx requires preview_available or post_processing status');
   }
 
-  if (project.status === 'preview_available' && !hasVerifiedQualityCheck(project, artifacts, checkpoints)) {
+  if ((project.status === 'preview_available' || project.status === 'post_processing') && !hasVerifiedQualityCheck(project, artifacts, checkpoints)) {
     return textResponse(400, 'Quality Check must pass against the current verified preview before export_pptx');
   }
 

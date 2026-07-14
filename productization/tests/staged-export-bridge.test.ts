@@ -35,6 +35,18 @@ function evidence(): ValidatedPreviewEvidence {
   return { project, currentRunId: 'run-1', lockedPreviewCheckpoint, manifest, previewArtifacts: [page] };
 }
 
+function postProcessedEvidence(): ValidatedPreviewEvidence {
+  const baseline = evidence();
+  const project = { ...baseline.project, status: 'post_processing' as const };
+  const manifest = { ...baseline.manifest, artifactId: 'final-bundle', kind: 'final_bundle' as const };
+  const page = { ...baseline.previewArtifacts[0]!, artifactId: 'final-page', kind: 'final_page_svg' as const };
+  const lockedPreviewCheckpoint: WorkflowCheckpoint = {
+    checkpointId: 'post-processed', projectId: project.projectId, stage: 'post_processed', status: 'completed',
+    statusBefore: 'preview_available', statusAfter: 'post_processing', artifactIds: [manifest.artifactId, page.artifactId], createdAt: now,
+  };
+  return { project, currentRunId: 'run-1', lockedPreviewCheckpoint, manifest, previewArtifacts: [page] };
+}
+
 function runtimeThatWrites(stageDir: string, options: { emptyPptx?: boolean } = {}) {
   const pptx = path.join(stageDir, 'deck.pptx');
   const markdown = path.join(stageDir, 'deck.md');
@@ -71,6 +83,29 @@ test('staged export cleans a bridge-error staging directory and emits no durable
     assert.equal(result.failure, 'runtime_error');
     assert.equal(result.cleanup.kind, 'cleaned');
     assert.equal(existsSync(result.stageDir), false);
+  }
+});
+
+test('staged export accepts only a post-processed final roster', () => {
+  const rootDir = mkdtempSync(path.join(os.tmpdir(), 'staged-export-'));
+  try {
+    let runtimeCalls = 0;
+    const accepted = runStagedExportBridge({
+      exportKey: 'post-processed', attemptNumber: 1, rootDir, preview: postProcessedEvidence(),
+      invokeRuntime: (_project, stageDir) => { runtimeCalls += 1; return runtimeThatWrites(stageDir); },
+    });
+    assert.equal(accepted.kind, 'staged');
+    assert.equal(runtimeCalls, 1);
+
+    const rejectedEvidence = postProcessedEvidence();
+    rejectedEvidence.previewArtifacts[0]!.kind = 'preview_page_svg';
+    const rejected = runStagedExportBridge({
+      exportKey: 'wrong-final-roster', attemptNumber: 1, rootDir, preview: rejectedEvidence,
+      invokeRuntime: () => { throw new Error('must not run'); },
+    });
+    assert.equal(rejected.kind, 'rejected');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
   }
 });
 

@@ -108,18 +108,42 @@ function hasCurrentWorkspacePreviewEvidence(previewArtifacts: ProductArtifactRef
   });
 }
 
+function hasCurrentWorkspaceFinalEvidence(project: ProjectRecord, finalArtifacts: ProductArtifactRef[]): boolean {
+  const workspace = path.resolve(project.workspace.workspacePath);
+  const pageKeys = finalArtifacts.map((artifact) => artifact.pageKey);
+  return finalArtifacts.length > 0
+    && pageKeys.every((pageKey) => typeof pageKey === 'string' && pageKey.length > 0)
+    && new Set(pageKeys).size === pageKeys.length
+    && finalArtifacts.every((artifact) => {
+      const storagePath = path.resolve(artifact.storageKey);
+      const expectedDigest = artifact.metadata?.sha256;
+      return storagePath.startsWith(`${workspace}${path.sep}`)
+        && storagePath.includes(`${path.sep}svg_final${path.sep}`)
+        && typeof expectedDigest === 'string'
+        && /^[a-f0-9]{64}$/i.test(expectedDigest)
+        && previewPageDigest(artifact) === expectedDigest;
+    });
+}
+
 function deriveCurrentPreviewEvidence(snapshot: ExportPersistenceSnapshot, projectId: string): ValidatedPreviewEvidence | null {
   const project = snapshot.projects.find((item) => item.projectId === projectId);
   const currentRunId = project?.lastRunId;
-  if (!project || !currentRunId || (project.status !== 'preview_available' && project.status !== 'export_ready')) {
+  if (!project || !currentRunId || (project.status !== 'preview_available' && project.status !== 'post_processing' && project.status !== 'export_ready')) {
     return null;
   }
 
   const checkpoints = projectCheckpoints(snapshot, projectId);
+  const postProcessed = project.status === 'post_processing';
   const lockedPreviewCheckpoint = checkpoints
-    .filter((checkpoint) => checkpoint.stage === 'preview_synced' && checkpoint.status === 'completed')
+    .filter((checkpoint) => checkpoint.stage === (postProcessed ? 'post_processed' : 'preview_synced') && checkpoint.status === 'completed')
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
   if (!lockedPreviewCheckpoint) {
+    return null;
+  }
+  const qualityPreviewCheckpoint = postProcessed
+    ? checkpoints.find((checkpoint) => checkpoint.stage === 'preview_synced' && checkpoint.status === 'completed')
+    : lockedPreviewCheckpoint;
+  if (!qualityPreviewCheckpoint) {
     return null;
   }
 
@@ -128,13 +152,13 @@ function deriveCurrentPreviewEvidence(snapshot: ExportPersistenceSnapshot, proje
     && artifact.status === 'ready'
     && lockedPreviewCheckpoint.artifactIds.includes(artifact.artifactId),
   );
-  const manifest = lockedArtifacts.find((artifact) => artifact.kind === 'preview_bundle');
-  const previewArtifacts = lockedArtifacts.filter((artifact) => artifact.kind === 'preview_page_svg');
+  const manifest = lockedArtifacts.find((artifact) => artifact.kind === (postProcessed ? 'final_bundle' : 'preview_bundle'));
+  const previewArtifacts = lockedArtifacts.filter((artifact) => artifact.kind === (postProcessed ? 'final_page_svg' : 'preview_page_svg'));
   const qualityReports = projectArtifacts(snapshot, projectId).filter((artifact) =>
     artifact.kind === 'quality_report'
     && artifact.status === 'ready'
     && artifact.runId === currentRunId
-    && artifact.metadata?.sourcePreviewCheckpointId === lockedPreviewCheckpoint.checkpointId
+    && artifact.metadata?.sourcePreviewCheckpointId === qualityPreviewCheckpoint.checkpointId
     && artifact.metadata?.summary
     && typeof artifact.metadata.summary === 'object'
     && (artifact.metadata.summary as { passed?: unknown }).passed === true
@@ -149,7 +173,14 @@ function deriveCurrentPreviewEvidence(snapshot: ExportPersistenceSnapshot, proje
     && checkpoint.artifactIds.length === 1
     && checkpoint.artifactIds[0] === qualityReports[0]?.artifactId,
   );
-  if (!manifest || !previewArtifacts.length || !hasCurrentWorkspacePreviewEvidence(previewArtifacts)
+  const postProcessingReports = lockedArtifacts.filter((artifact) => artifact.kind === 'post_processing_report'
+    && artifact.metadata?.summary && typeof artifact.metadata.summary === 'object'
+    && (artifact.metadata.summary as { passed?: unknown; errors?: unknown }).passed === true
+    && (artifact.metadata.summary as { errors?: unknown }).errors === 0);
+  if (!manifest || !previewArtifacts.length || !(postProcessed
+    ? hasCurrentWorkspaceFinalEvidence(project, previewArtifacts)
+    : hasCurrentWorkspacePreviewEvidence(previewArtifacts))
+    || (postProcessed && postProcessingReports.length !== 1)
     || qualityReports.length !== 1 || !qualityCheckpoint) {
     return null;
   }

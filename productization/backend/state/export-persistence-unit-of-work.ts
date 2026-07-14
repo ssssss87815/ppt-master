@@ -212,7 +212,7 @@ export class StateBackedExportPersistenceUnitOfWork implements ExportPersistence
       if (existing) {
         return { kind: 'rejected' as const, reason: 'missing_or_invalid_attempt' as const };
       }
-      if (!project || project.status !== 'preview_available') {
+      if (!project || (project.status !== 'preview_available' && project.status !== 'post_processing')) {
         return { kind: 'rejected' as const, reason: 'project_not_preview_available' as const };
       }
       if (project.lastRunId !== input.runId) {
@@ -259,7 +259,7 @@ export class StateBackedExportPersistenceUnitOfWork implements ExportPersistence
         input.checkpoint.projectId !== attempt.projectId ||
         input.checkpoint.stage !== 'export_ready' ||
         input.checkpoint.status !== 'completed' ||
-        input.checkpoint.statusBefore !== 'preview_available' ||
+        (input.checkpoint.statusBefore !== 'preview_available' && input.checkpoint.statusBefore !== 'post_processing') ||
         input.checkpoint.statusAfter !== 'export_ready' ||
         input.project.latestCheckpointId !== input.checkpoint.checkpointId
       ) {

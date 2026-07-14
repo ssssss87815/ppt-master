@@ -62,7 +62,7 @@ export function hasVerifiedQualityCheck(
   artifacts: ProductArtifactRef[],
   checkpoints: WorkflowCheckpoint[],
 ): boolean {
-  if (project.status !== 'preview_available' || !project.lastRunId) return false;
+  if ((project.status !== 'preview_available' && project.status !== 'post_processing') || !project.lastRunId) return false;
 
   const previewCheckpoints = checkpoints.filter((checkpoint) =>
     checkpoint.projectId === project.projectId
