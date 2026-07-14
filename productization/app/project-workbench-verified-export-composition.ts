@@ -128,32 +128,35 @@ function hasCurrentWorkspaceFinalEvidence(project: ProjectRecord, finalArtifacts
 function deriveCurrentPreviewEvidence(snapshot: ExportPersistenceSnapshot, projectId: string): ValidatedPreviewEvidence | null {
   const project = snapshot.projects.find((item) => item.projectId === projectId);
   const currentRunId = project?.lastRunId;
-  if (!project || !currentRunId || (project.status !== 'preview_available' && project.status !== 'post_processing' && project.status !== 'export_ready')) {
+  if (!project || !currentRunId || (project.status !== 'post_processing' && project.status !== 'export_ready')) {
     return null;
   }
 
   const checkpoints = projectCheckpoints(snapshot, projectId);
-  const postProcessed = project.status === 'post_processing';
   const lockedPreviewCheckpoint = checkpoints
-    .filter((checkpoint) => checkpoint.stage === (postProcessed ? 'post_processed' : 'preview_synced') && checkpoint.status === 'completed')
+    .filter((checkpoint) => checkpoint.stage === 'post_processed' && checkpoint.status === 'completed' && checkpoint.statusAfter === 'post_processing')
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
   if (!lockedPreviewCheckpoint) {
     return null;
   }
-  const qualityPreviewCheckpoint = postProcessed
-    ? checkpoints.find((checkpoint) => checkpoint.stage === 'preview_synced' && checkpoint.status === 'completed')
-    : lockedPreviewCheckpoint;
+  const qualityPreviewCheckpoint = checkpoints.find((checkpoint) => checkpoint.stage === 'preview_synced' && checkpoint.status === 'completed');
   if (!qualityPreviewCheckpoint) {
     return null;
   }
+  const qualityPreviewArtifacts = projectArtifacts(snapshot, projectId).filter((artifact) =>
+    artifact.runId === currentRunId
+    && artifact.status === 'ready'
+    && qualityPreviewCheckpoint.artifactIds.includes(artifact.artifactId)
+    && artifact.kind === 'preview_page_svg',
+  );
 
   const lockedArtifacts = projectArtifacts(snapshot, projectId).filter((artifact) =>
     artifact.runId === currentRunId
     && artifact.status === 'ready'
     && lockedPreviewCheckpoint.artifactIds.includes(artifact.artifactId),
   );
-  const manifest = lockedArtifacts.find((artifact) => artifact.kind === (postProcessed ? 'final_bundle' : 'preview_bundle'));
-  const previewArtifacts = lockedArtifacts.filter((artifact) => artifact.kind === (postProcessed ? 'final_page_svg' : 'preview_page_svg'));
+  const manifest = lockedArtifacts.find((artifact) => artifact.kind === 'final_bundle');
+  const previewArtifacts = lockedArtifacts.filter((artifact) => artifact.kind === 'final_page_svg');
   const qualityReports = projectArtifacts(snapshot, projectId).filter((artifact) =>
     artifact.kind === 'quality_report'
     && artifact.status === 'ready'
@@ -177,15 +180,17 @@ function deriveCurrentPreviewEvidence(snapshot: ExportPersistenceSnapshot, proje
     && artifact.metadata?.summary && typeof artifact.metadata.summary === 'object'
     && (artifact.metadata.summary as { passed?: unknown; errors?: unknown }).passed === true
     && (artifact.metadata.summary as { errors?: unknown }).errors === 0);
-  if (!manifest || !previewArtifacts.length || !(postProcessed
-    ? hasCurrentWorkspaceFinalEvidence(project, previewArtifacts)
-    : hasCurrentWorkspacePreviewEvidence(previewArtifacts))
-    || (postProcessed && postProcessingReports.length !== 1)
+  const postProcessingReport = postProcessingReports[0];
+  if (!manifest || !previewArtifacts.length || !hasCurrentWorkspacePreviewEvidence(qualityPreviewArtifacts) || !hasCurrentWorkspaceFinalEvidence(project, previewArtifacts)
+    || !Array.isArray(manifest.metadata?.finalPageArtifactIds)
+    || manifest.metadata.finalPageArtifactIds.length !== previewArtifacts.length
+    || !manifest.metadata.finalPageArtifactIds.every((artifactId) => typeof artifactId === 'string' && previewArtifacts.some((artifact) => artifact.artifactId === artifactId))
+    || postProcessingReports.length !== 1
     || qualityReports.length !== 1 || !qualityCheckpoint) {
     return null;
   }
 
-  return { project, currentRunId, lockedPreviewCheckpoint, manifest, previewArtifacts };
+  return { project, currentRunId, lockedPreviewCheckpoint, manifest, previewArtifacts, postProcessingReport };
 }
 
 function durableArtifactPath(rootDir: string, storageKey: string): string | null {

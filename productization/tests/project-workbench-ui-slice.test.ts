@@ -112,13 +112,11 @@ function main() {
     assert.equal(previewView.workbench.sections.find((item) => item.key === 'preview')?.status, 'complete', 'preview section should be complete once preview is available');
     assert.ok((previewView.preview?.items ?? []).some((item) => item.role === 'page'), 'preview view should surface preview page items');
 
-    const exported = exportLocalPhase(previewed.project, '2026-06-30T16:40:00.000Z');
-    const exportView = toProjectViewModel(exported.project, [...postLockArtifacts, ...previewed.artifacts, ...exported.artifacts], prepared.recommendations, exported.checkpoints[0]);
-
-    assert.equal(exportView.status, 'export_ready', 'export view should advance to export_ready');
-    assert.equal(exportView.workbench.sections.find((item) => item.key === 'export')?.status, 'complete', 'export section should become complete once export artifacts exist');
-    assert.ok((exportView.export?.latestExportUrl ?? '').endsWith('.pptx'), 'export view should expose pptx url');
-    assert.ok((exportView.export?.companionStorageKeys ?? []).some((key) => key.endsWith('.md')), 'export view should expose markdown companion');
+    assert.throws(
+      () => exportLocalPhase(previewed.project, '2026-06-30T16:40:00.000Z'),
+      /local export is not a delivery path/,
+      'the workbench fixture must not bypass verified staged delivery',
+    );
 
     console.log('project workbench ui slice test: ok');
   } finally {

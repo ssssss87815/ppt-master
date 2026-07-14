@@ -87,8 +87,8 @@ export async function runStagedExportThroughAtomicCommit(
   const reservation = await unitOfWork.reserve({
     ...request,
     previewCheckpointId: request.preview.lockedPreviewCheckpoint.checkpointId,
-    previewArtifactIds: [request.preview.manifest, ...request.preview.previewArtifacts].map((artifact) => artifact.artifactId),
-    previewArtifactDigest: previewDigest([request.preview.manifest, ...request.preview.previewArtifacts]),
+    previewArtifactIds: [request.preview.manifest, ...request.preview.previewArtifacts, request.preview.postProcessingReport].map((artifact) => artifact.artifactId),
+    previewArtifactDigest: previewDigest([request.preview.manifest, ...request.preview.previewArtifacts, request.preview.postProcessingReport]),
   });
 
   if (reservation.kind === 'completed') return { kind: 'completed', delivery: reservation.delivery };

@@ -56,16 +56,11 @@ function main() {
       'preview page should expose generation provenance for the first svg',
     );
 
-    const exported = exportLocalPhase(previewed.project, '2026-06-30T16:40:00.000Z');
-    const exportNormalizationArtifact = exported.artifacts.find((item) => item.metadata?.verification === 'runtime_workspace_generation_bridge' && item.metadata?.role === 'generation_evidence');
-    const exportArtifact = exported.artifacts.find((item) => item.kind === 'export_pptx');
-
-    assert.ok(exportNormalizationArtifact, 'export should return normalization generation evidence');
-    assert.ok(exportArtifact, 'export should create an export artifact');
-    assert.equal(exportArtifact?.mimeType, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'export artifact should expose pptx mime type');
-    assert.ok(exportArtifact?.storageKey.endsWith('.pptx'), 'export artifact should expose pptx storage key');
-    assert.ok(exported.artifacts.some((item) => item.kind === 'runtime_log' && item.storageKey.endsWith('.md')), 'export should materialize markdown companion artifact');
-    assert.ok(exported.artifacts.some((item) => item.kind === 'image_manifest' && item.storageKey.endsWith('/image_manifest.json')), 'export should materialize image manifest companion artifact');
+    assert.throws(
+      () => exportLocalPhase(previewed.project, '2026-06-30T16:40:00.000Z'),
+      /local export is not a delivery path/,
+      'local export must not create an unverified export artifact',
+    );
 
     console.log('preview/export artifact richness test: ok');
   } finally {

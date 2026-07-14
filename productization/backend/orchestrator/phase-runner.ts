@@ -5,7 +5,6 @@ import * as path from 'node:path';
 import type { ProductActionResult } from '../adapter/interface';
 import type { ProductArtifactRef } from '../models/artifacts';
 import type { ProjectRecord, RevisionRequestRecord, WorkflowCheckpoint } from '../models/projects';
-import { runExportFromWorkspace } from '../adapter/export-runtime-bridge';
 import { runGenerationFromWorkspace } from '../adapter/generation-runtime-bridge';
 import { runSvgAuthoringProbe } from '../adapter/svg-authoring-runtime-bridge';
 import { runPreviewFromWorkspace } from '../adapter/preview-runtime-bridge';
@@ -557,40 +556,9 @@ export function exportLocalPhase(
   checkpoints: WorkflowCheckpoint[];
   artifacts: ProductArtifactRef[];
 } {
-  if (project.status !== 'preview_available') {
-    throw new Error(`export phase requires preview_available status; received ${project.status}`);
-  }
-
-  const normalizedGeneration = runGenerationFromWorkspace(project, now);
-  if (normalizedGeneration.runtimeStatus !== 'generation_synced') {
-    throw new Error(`export normalization failed: ${normalizedGeneration.note}`);
-  }
-
-  const exported = runExportFromWorkspace(project, now);
-  if (exported.runtimeStatus !== 'exported') {
-    throw new Error(exported.note);
-  }
-
-  const nextProject: ProjectRecord = {
-    ...project,
-    status: 'export_ready',
-    updatedAt: now,
-  };
-  const exportCheckpoint = toWorkflowCheckpoint(
-    nextProject,
-    'export_ready',
-    project.status,
-    nextProject.status,
-    exported.artifacts.map((artifact) => artifact.artifactId),
-    now,
-    'Export artifacts prepared by the runtime export bridge.',
+  void project;
+  void now;
+  throw new Error(
+    'local export is not a delivery path; use the verified staged export after Quality Check and post-processing',
   );
-  const attached = attachPhaseCheckpoint(nextProject, exportCheckpoint, [...normalizedGeneration.artifacts, ...exported.artifacts], now);
-
-  return {
-    project: attached.project,
-    artifacts: attached.artifacts,
-    nextStatus: nextProject.status,
-    checkpoints: [exportCheckpoint],
-  };
 }
