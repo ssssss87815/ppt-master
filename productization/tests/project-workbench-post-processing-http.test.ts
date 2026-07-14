@@ -49,9 +49,10 @@ async function main() {
     assert.equal(persisted.projects[0]?.status, 'post_processing');
     assert.equal(persisted.artifacts.filter((artifact) => artifact.kind === 'final_page_svg' && artifact.status === 'ready').length, 2);
     assert.equal(persisted.checkpoints.some((checkpoint) => checkpoint.stage === 'post_processed' && checkpoint.status === 'completed'), true);
-    const exportResponse = await handleProjectWorkbenchHttpRequest(dependencies, { method: 'POST', url: `/projects/${PROJECT_ID}`, body: JSON.stringify({ action: 'export_pptx', idempotencyKey: 'must-not-export-final-svg' }) });
-    assert.equal(exportResponse.status, 400);
-    assert.match(exportResponse.body, /preview_available/);
+    const exportResponse = await handleProjectWorkbenchHttpRequest(dependencies, { method: 'POST', url: `/projects/${PROJECT_ID}`, body: JSON.stringify({ action: 'export_pptx', idempotencyKey: 'export-verified-final-svg' }) });
+    assert.equal(exportResponse.status, 200, exportResponse.body);
+    assert.equal(state.snapshot().projects[0]?.status, 'export_ready');
+    assert.equal(state.snapshot().checkpoints.some((checkpoint) => checkpoint.stage === 'export_ready' && checkpoint.statusBefore === 'post_processing'), true);
     console.log('project workbench post-processing HTTP test: ok');
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
