@@ -15,7 +15,7 @@ import type { ProjectRecord, WorkflowCheckpoint } from '../backend/models/projec
 
 const now = '2026-07-11T10:00:00.000Z';
 
-function evidence(): ValidatedPreviewEvidence {
+function previewOnlyEvidence(): ValidatedPreviewEvidence {
   const project: ProjectRecord = {
     projectId: 'staged-export-project', name: 'Staged export project', status: 'preview_available',
     workspace: { projectId: 'staged-export-project', workspacePath: '/workspace/project' }, lastRunId: 'run-1', createdAt: now, updatedAt: now,
@@ -32,7 +32,32 @@ function evidence(): ValidatedPreviewEvidence {
     checkpointId: 'preview-checkpoint', projectId: project.projectId, stage: 'preview_synced', status: 'completed',
     statusBefore: 'generation_in_progress', statusAfter: 'preview_available', artifactIds: [manifest.artifactId, page.artifactId], createdAt: now,
   };
-  return { project, currentRunId: 'run-1', lockedPreviewCheckpoint, manifest, previewArtifacts: [page] };
+  return {
+    project,
+    currentRunId: 'run-1',
+    lockedPreviewCheckpoint,
+    manifest,
+    previewArtifacts: [page],
+    postProcessingReport: { ...manifest, artifactId: 'missing-post-processing-report', kind: 'post_processing_report', status: 'failed' },
+  };
+}
+
+function postProcessedEvidence(): ValidatedPreviewEvidence {
+  const baseline = previewOnlyEvidence();
+  const project = { ...baseline.project, status: 'post_processing' as const };
+  const page = { ...baseline.previewArtifacts[0]!, artifactId: 'final-page', kind: 'final_page_svg' as const, pageKey: 'page-1' };
+  const manifest = { ...baseline.manifest, artifactId: 'final-bundle', kind: 'final_bundle' as const, metadata: { finalPageArtifactIds: [page.artifactId] } };
+  const postProcessingReport = {
+    ...baseline.postProcessingReport,
+    artifactId: 'post-processing-report',
+    status: 'ready' as const,
+    metadata: { summary: { passed: true, errors: 0 } },
+  };
+  const lockedPreviewCheckpoint: WorkflowCheckpoint = {
+    checkpointId: 'post-processed', projectId: project.projectId, stage: 'post_processed', status: 'completed',
+    statusBefore: 'preview_available', statusAfter: 'post_processing', artifactIds: [manifest.artifactId, page.artifactId, postProcessingReport.artifactId], createdAt: now,
+  };
+  return { project, currentRunId: 'run-1', lockedPreviewCheckpoint, manifest, previewArtifacts: [page], postProcessingReport };
 }
 
 function runtimeThatWrites(stageDir: string, options: { emptyPptx?: boolean } = {}) {
@@ -46,9 +71,9 @@ function runtimeThatWrites(stageDir: string, options: { emptyPptx?: boolean } = 
   return { runtimeStatus: 'exported' as const, note: 'test runtime', output: { pptxPath: pptx, markdownCompanionPath: markdown, imageManifestPath: imageManifest } };
 }
 
-test('staged export rejects stale or cross-run preview evidence before runtime invocation', () => {
+test('staged export rejects preview-only, stale, or cross-run evidence before runtime invocation', () => {
   const rootDir = mkdtempSync(path.join(os.tmpdir(), 'staged-export-'));
-  const preview = evidence();
+  const preview = previewOnlyEvidence();
   preview.previewArtifacts[0]!.runId = 'other-run';
   let calls = 0;
   const result = runStagedExportBridge({
@@ -63,7 +88,7 @@ test('staged export rejects stale or cross-run preview evidence before runtime i
 test('staged export cleans a bridge-error staging directory and emits no durable artifacts', () => {
   const rootDir = mkdtempSync(path.join(os.tmpdir(), 'staged-export-'));
   const result = runStagedExportBridge({
-    exportKey: 'runtime-failure', attemptNumber: 2, rootDir, preview: evidence(),
+    exportKey: 'runtime-failure', attemptNumber: 2, rootDir, preview: postProcessedEvidence(),
     invokeRuntime: () => ({ runtimeStatus: 'failed', note: 'bridge boom' }),
   });
   assert.equal(result.kind, 'failed');
@@ -74,10 +99,41 @@ test('staged export cleans a bridge-error staging directory and emits no durable
   }
 });
 
+test('staged export accepts only a post-processed final roster', () => {
+  const rootDir = mkdtempSync(path.join(os.tmpdir(), 'staged-export-'));
+  try {
+    let runtimeCalls = 0;
+    const accepted = runStagedExportBridge({
+      exportKey: 'post-processed', attemptNumber: 1, rootDir, preview: postProcessedEvidence(),
+      invokeRuntime: (_project, stageDir) => { runtimeCalls += 1; return runtimeThatWrites(stageDir); },
+    });
+    assert.equal(accepted.kind, 'staged');
+    assert.equal(runtimeCalls, 1);
+
+    const rejectedEvidence = postProcessedEvidence();
+    rejectedEvidence.previewArtifacts[0]!.kind = 'preview_page_svg';
+    const rejected = runStagedExportBridge({
+      exportKey: 'wrong-final-roster', attemptNumber: 1, rootDir, preview: rejectedEvidence,
+      invokeRuntime: () => { throw new Error('must not run'); },
+    });
+    assert.equal(rejected.kind, 'rejected');
+
+    const missingReport = postProcessedEvidence();
+    missingReport.postProcessingReport.status = 'failed';
+    const rejectedReport = runStagedExportBridge({
+      exportKey: 'missing-report', attemptNumber: 1, rootDir, preview: missingReport,
+      invokeRuntime: () => { throw new Error('must not run'); },
+    });
+    assert.equal(rejectedReport.kind, 'rejected');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
 test('staged export rejects and cleans an empty PPTX even when companions exist', () => {
   const rootDir = mkdtempSync(path.join(os.tmpdir(), 'staged-export-'));
   const result = runStagedExportBridge({
-    exportKey: 'empty-pptx', attemptNumber: 3, rootDir, preview: evidence(),
+    exportKey: 'empty-pptx', attemptNumber: 3, rootDir, preview: postProcessedEvidence(),
     invokeRuntime: (_project, stageDir) => runtimeThatWrites(stageDir, { emptyPptx: true }),
   });
   assert.equal(result.kind, 'failed');
@@ -92,7 +148,7 @@ test('staged export runs the existing shim only into a caller-owned deterministi
   const rootDir = mkdtempSync(path.join(os.tmpdir(), 'staged-export-real-'));
   const workspace = path.join(rootDir, 'workspace');
   cpSync('productization/test-fixtures/runtime-workspace', workspace, { recursive: true });
-  const preview = evidence();
+  const preview = postProcessedEvidence();
   preview.project.workspace.workspacePath = workspace;
   const result = runStagedExportBridge({ exportKey: 'real-shim', attemptNumber: 5, rootDir, preview });
   assert.equal(result.kind, 'staged');
@@ -107,7 +163,7 @@ test('staged export runs the existing shim only into a caller-owned deterministi
 test('staged output is excluded from fresh-read delivery until a later durable commit', () => {
   const rootDir = mkdtempSync(path.join(os.tmpdir(), 'staged-export-'));
   const result = runStagedExportBridge({
-    exportKey: 'success', attemptNumber: 4, rootDir, preview: evidence(),
+    exportKey: 'success', attemptNumber: 4, rootDir, preview: postProcessedEvidence(),
     invokeRuntime: (_project, stageDir) => runtimeThatWrites(stageDir),
   });
   assert.equal(result.kind, 'staged');

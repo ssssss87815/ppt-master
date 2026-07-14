@@ -87,8 +87,8 @@ export async function runStagedExportThroughAtomicCommit(
   const reservation = await unitOfWork.reserve({
     ...request,
     previewCheckpointId: request.preview.lockedPreviewCheckpoint.checkpointId,
-    previewArtifactIds: [request.preview.manifest, ...request.preview.previewArtifacts].map((artifact) => artifact.artifactId),
-    previewArtifactDigest: previewDigest([request.preview.manifest, ...request.preview.previewArtifacts]),
+    previewArtifactIds: [request.preview.manifest, ...request.preview.previewArtifacts, request.preview.postProcessingReport].map((artifact) => artifact.artifactId),
+    previewArtifactDigest: previewDigest([request.preview.manifest, ...request.preview.previewArtifacts, request.preview.postProcessingReport]),
   });
 
   if (reservation.kind === 'completed') return { kind: 'completed', delivery: reservation.delivery };
@@ -125,7 +125,7 @@ export async function runStagedExportThroughAtomicCommit(
       projectId: request.projectId,
       stage: 'export_ready',
       status: 'completed',
-      statusBefore: 'preview_available',
+      statusBefore: request.preview.project.status,
       statusAfter: 'export_ready',
       artifactIds: artifacts.map((artifact) => artifact.artifactId),
       note: 'Staged export validated and committed atomically.',

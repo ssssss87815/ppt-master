@@ -25,9 +25,13 @@ function artifact(artifactId: string, kind: ProductArtifactRef['kind'], runId = 
   return { artifactId, projectId: PROJECT_ID, kind, scope: 'run', status: 'ready', runId, storageKey: `projects/${PROJECT_ID}/${artifactId}`, createdAt: NOW, updatedAt: NOW };
 }
 
-function seed(workspacePath: string, checkpointArtifactIds = ['preview-bundle', 'preview-page-1']): ExportPersistenceSnapshot {
+function seed(workspacePath: string, checkpointArtifactIds?: string[]): ExportPersistenceSnapshot {
   const pagePath = path.join(workspacePath, 'svg_output', readdirSync(path.join(workspacePath, 'svg_output')).filter((name) => name.endsWith('.svg')).sort()[0]!);
   const pageDigest = createHash('sha256').update(readFileSync(pagePath)).digest('hex');
+  const finalDir = path.join(workspacePath, 'svg_final');
+  mkdirSync(finalDir, { recursive: true });
+  const finalPagePath = path.join(finalDir, path.basename(pagePath));
+  cpSync(pagePath, finalPagePath);
   const artifacts = [
     artifact('preview-bundle', 'preview_bundle'),
     {
@@ -40,12 +44,29 @@ function seed(workspacePath: string, checkpointArtifactIds = ['preview-bundle', 
     ...artifact('quality-report', 'quality_report'),
     metadata: { sourcePreviewCheckpointId: 'preview-locked', summary: { passed: true }, sha256: 'a'.repeat(64) },
   };
+  const finalPage = {
+    ...artifact('final-page-1', 'final_page_svg'),
+    scope: 'page' as const,
+    pageKey: 'page-1',
+    storageKey: finalPagePath,
+    metadata: { sha256: pageDigest },
+  };
+  const finalBundle = {
+    ...artifact('final-bundle', 'final_bundle'),
+    metadata: { finalPageArtifactIds: [finalPage.artifactId] },
+  };
+  const postProcessingReport = {
+    ...artifact('post-processing-report', 'post_processing_report'),
+    metadata: { summary: { passed: true, errors: 0 } },
+  };
+  const postProcessedArtifactIds = checkpointArtifactIds ?? [finalBundle.artifactId, finalPage.artifactId, postProcessingReport.artifactId];
   return {
-    projects: [{ projectId: PROJECT_ID, name: 'Verified export Node HTTP', status: 'preview_available', workspace: { projectId: PROJECT_ID, workspacePath }, lastRunId: RUN_ID, latestCheckpointId: 'quality-checked', createdAt: NOW, updatedAt: NOW }],
-    artifacts: [...artifacts, qualityReport],
+    projects: [{ projectId: PROJECT_ID, name: 'Verified export Node HTTP', status: 'post_processing', workspace: { projectId: PROJECT_ID, workspacePath }, lastRunId: RUN_ID, latestCheckpointId: 'post-processed', createdAt: NOW, updatedAt: NOW }],
+    artifacts: [...artifacts, qualityReport, finalBundle, finalPage, postProcessingReport],
     checkpoints: [
-      { checkpointId: 'preview-locked', projectId: PROJECT_ID, stage: 'preview_synced', status: 'completed', statusBefore: 'generation_in_progress', statusAfter: 'preview_available', artifactIds: checkpointArtifactIds, createdAt: NOW },
+      { checkpointId: 'preview-locked', projectId: PROJECT_ID, stage: 'preview_synced', status: 'completed', statusBefore: 'generation_in_progress', statusAfter: 'preview_available', artifactIds: ['preview-bundle', 'preview-page-1'], createdAt: NOW },
       { checkpointId: 'quality-checked', projectId: PROJECT_ID, stage: 'quality_checked', status: 'completed', statusBefore: 'preview_available', statusAfter: 'preview_available', artifactIds: [qualityReport.artifactId], createdAt: NOW },
+      { checkpointId: 'post-processed', projectId: PROJECT_ID, stage: 'post_processed', status: 'completed', statusBefore: 'preview_available', statusAfter: 'post_processing', artifactIds: postProcessedArtifactIds, createdAt: NOW },
     ],
     attempts: [],
   };
@@ -177,9 +198,9 @@ async function main() {
       const failed = await exportRequest(failing.origin, 'persistence-failure');
       assert.equal(failed.status, 500, 'filesystem persistence failure must not return delivery');
       const rolledBack = failureState.snapshot();
-      assert.equal(rolledBack.projects[0]?.status, 'preview_available');
-      assert.equal(rolledBack.artifacts.length, 3);
-      assert.equal(rolledBack.checkpoints.length, 2);
+      assert.equal(rolledBack.projects[0]?.status, 'post_processing');
+      assert.equal(rolledBack.artifacts.length, 6);
+      assert.equal(rolledBack.checkpoints.length, 3);
       assert.equal(rolledBack.attempts[0]?.status, 'failed_recoverable');
     } finally {
       await stop(failing.server);

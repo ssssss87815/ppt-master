@@ -12,6 +12,7 @@ export type ValidatedPreviewEvidence = {
   lockedPreviewCheckpoint: WorkflowCheckpoint;
   manifest: ProductArtifactRef;
   previewArtifacts: ProductArtifactRef[];
+  postProcessingReport: ProductArtifactRef;
 };
 
 export type StagedExportRequest = {
@@ -78,31 +79,55 @@ export function excludeStagedArtifactsFromFreshRead(artifacts: ProductArtifactRe
 }
 
 function validatePreview(evidence: ValidatedPreviewEvidence): string | null {
-  const { project, currentRunId, lockedPreviewCheckpoint, manifest, previewArtifacts } = evidence;
-  if (project.status !== 'preview_available' || project.lastRunId !== currentRunId) {
-    return 'project is not the current preview_available run';
+  const { project, currentRunId, lockedPreviewCheckpoint, manifest, previewArtifacts, postProcessingReport } = evidence;
+  if (project.status !== 'post_processing' || project.lastRunId !== currentRunId) {
+    return 'project is not the current post-processed export-eligible run';
   }
   if (
     lockedPreviewCheckpoint.projectId !== project.projectId ||
-    lockedPreviewCheckpoint.stage !== 'preview_synced' ||
-    lockedPreviewCheckpoint.status !== 'completed'
+    lockedPreviewCheckpoint.stage !== 'post_processed' ||
+    lockedPreviewCheckpoint.status !== 'completed' ||
+    lockedPreviewCheckpoint.statusAfter !== 'post_processing'
   ) {
-    return 'preview checkpoint is not a completed checkpoint for this project';
+    return 'post-processing checkpoint is not a completed checkpoint for this project';
   }
-  if (manifest.projectId !== project.projectId || manifest.runId !== currentRunId || manifest.kind !== 'preview_bundle' || manifest.status !== 'ready') {
-    return 'preview manifest is not ready for the current run';
+  if (manifest.projectId !== project.projectId || manifest.runId !== currentRunId || manifest.kind !== 'final_bundle' || manifest.status !== 'ready') {
+    return 'final export bundle is not ready for the current run';
   }
-  if (!lockedPreviewCheckpoint.artifactIds.includes(manifest.artifactId)) {
-    return 'preview checkpoint does not lock the preview manifest';
+  if (
+    postProcessingReport.projectId !== project.projectId
+    || postProcessingReport.runId !== currentRunId
+    || postProcessingReport.kind !== 'post_processing_report'
+    || postProcessingReport.status !== 'ready'
+    || typeof postProcessingReport.metadata?.summary !== 'object'
+    || (postProcessingReport.metadata.summary as { passed?: unknown; errors?: unknown }).passed !== true
+    || (postProcessingReport.metadata.summary as { errors?: unknown }).errors !== 0
+  ) {
+    return 'passed post-processing report is not ready for the current run';
+  }
+  if (!lockedPreviewCheckpoint.artifactIds.includes(manifest.artifactId) || !lockedPreviewCheckpoint.artifactIds.includes(postProcessingReport.artifactId)) {
+    return 'post-processing checkpoint does not lock the final bundle and report';
   }
   if (!previewArtifacts.length || previewArtifacts.some((artifact) =>
     artifact.projectId !== project.projectId ||
     artifact.runId !== currentRunId ||
-    artifact.kind !== 'preview_page_svg' ||
+    artifact.kind !== 'final_page_svg' ||
     artifact.status !== 'ready' ||
     !lockedPreviewCheckpoint.artifactIds.includes(artifact.artifactId),
   )) {
-    return 'preview page artifacts are missing, stale, or cross-run';
+    return 'final export page artifacts are missing, stale, or cross-run';
+  }
+  const pageKeys = previewArtifacts.map((artifact) => artifact.pageKey);
+  const expectedFinalPageIds = manifest.metadata?.finalPageArtifactIds;
+  if (
+    pageKeys.some((pageKey) => typeof pageKey !== 'string' || pageKey.length === 0)
+    || new Set(pageKeys).size !== pageKeys.length
+    || !Array.isArray(expectedFinalPageIds)
+    || expectedFinalPageIds.length !== previewArtifacts.length
+    || new Set(expectedFinalPageIds).size !== expectedFinalPageIds.length
+    || !expectedFinalPageIds.every((artifactId) => typeof artifactId === 'string' && previewArtifacts.some((artifact) => artifact.artifactId === artifactId))
+  ) {
+    return 'final bundle does not lock an exact unique final page roster';
   }
   return null;
 }
