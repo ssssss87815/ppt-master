@@ -29,13 +29,25 @@ def make_board(path: Path, root: Path) -> None:
             claim_lock TEXT,
             worker_pid INTEGER,
             workspace_kind TEXT NOT NULL,
-            workspace_path TEXT NOT NULL
+            workspace_path TEXT
         );
         CREATE TABLE task_links (parent_id TEXT NOT NULL, child_id TEXT NOT NULL);
+        CREATE TABLE kanban_notify_subs (
+            task_id TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            chat_id TEXT NOT NULL,
+            thread_id TEXT NOT NULL DEFAULT '',
+            user_id TEXT,
+            notifier_profile TEXT,
+            PRIMARY KEY (task_id, platform, chat_id, thread_id)
+        );
         """
     )
     con.execute("INSERT INTO tasks VALUES ('t_a4281740', 'blocked', NULL, NULL, 'dir', ?)", (str(root),))
-    con.execute("INSERT INTO tasks VALUES ('t_approved', 'ready', NULL, NULL, 'dir', ?)", (str(root),))
+    con.execute("INSERT INTO tasks VALUES ('t_approved', 'ready', NULL, NULL, 'worktree', ?)", (str(root),))
+    con.execute(
+        "INSERT INTO kanban_notify_subs VALUES ('t_approved', 'feishu', 'chat-1', 'thread-1', 'user-1', 'coder')"
+    )
     con.commit()
     con.close()
 
@@ -47,12 +59,18 @@ def main() -> None:
         manifest = root / "approved-dispatch-manifest.json"
         make_board(db, root)
         manifest.write_text(json.dumps({
-            "version": 1,
+            "version": 2,
             "board": MODULE.BOARD,
             "candidates": [{
                 "task_id": "t_approved",
-                "workspace_kind": "dir",
-                "workspace_path": str(root),
+                "workspace_kind": "worktree",
+                "source_repo": str(root),
+                "feishu_subscription": {
+                    "chat_id": "chat-1",
+                    "thread_id": "thread-1",
+                    "user_id": "user-1",
+                    "notifier_profile": "coder",
+                },
             }],
         }))
         before = db.read_bytes()

@@ -30,6 +30,8 @@ def create_db(
     root_lock: str | None = None,
     executable: str | None = None,
     executable_id: str = "t_probe",
+    executable_workspace_kind: str = "worktree",
+    executable_workspace_path: Path | None = None,
     root_incoming: bool = False,
 ) -> None:
     con = sqlite3.connect(path)
@@ -41,9 +43,18 @@ def create_db(
             claim_lock TEXT,
             worker_pid INTEGER,
             workspace_kind TEXT NOT NULL,
-            workspace_path TEXT NOT NULL
+            workspace_path TEXT
         );
         CREATE TABLE task_links (parent_id TEXT NOT NULL, child_id TEXT NOT NULL);
+        CREATE TABLE kanban_notify_subs (
+            task_id TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            chat_id TEXT NOT NULL,
+            thread_id TEXT NOT NULL DEFAULT '',
+            user_id TEXT,
+            notifier_profile TEXT,
+            PRIMARY KEY (task_id, platform, chat_id, thread_id)
+        );
         """
     )
     con.execute(
@@ -54,8 +65,17 @@ def create_db(
     if executable:
         con.execute(
             "INSERT INTO tasks(id, status, claim_lock, worker_pid, workspace_kind, workspace_path) "
-            "VALUES (?, ?, NULL, NULL, 'dir', ?)",
-            (executable_id, executable, str(repo_root)),
+            "VALUES (?, ?, NULL, NULL, ?, ?)",
+            (
+                executable_id,
+                executable,
+                executable_workspace_kind,
+                str(executable_workspace_path or repo_root),
+            ),
+        )
+        con.execute(
+            "INSERT INTO kanban_notify_subs VALUES (?, 'feishu', 'chat-1', 'thread-1', 'user-1', 'coder')",
+            (executable_id,),
         )
     if root_incoming:
         con.execute("INSERT INTO task_links(parent_id, child_id) VALUES (?, ?)", ("t_probe", "t_a4281740"))
@@ -63,13 +83,27 @@ def create_db(
     con.close()
 
 
-def candidate(task_id: str, root: Path) -> dict[str, str]:
-    return {"task_id": task_id, "workspace_kind": "dir", "workspace_path": str(root)}
+def subscription() -> dict[str, str]:
+    return {
+        "chat_id": "chat-1",
+        "thread_id": "thread-1",
+        "user_id": "user-1",
+        "notifier_profile": "coder",
+    }
 
 
-def write_manifest(root: Path, candidates: list[dict[str, str]], board: str = MODULE.BOARD) -> Path:
+def candidate(task_id: str, root: Path) -> dict[str, object]:
+    return {
+        "task_id": task_id,
+        "workspace_kind": "worktree",
+        "source_repo": str(root),
+        "feishu_subscription": subscription(),
+    }
+
+
+def write_manifest(root: Path, candidates: list[dict[str, object]], board: str = MODULE.BOARD) -> Path:
     path = root / "approved-dispatch-manifest.json"
-    path.write_text(json.dumps({"version": 1, "board": board, "candidates": candidates}))
+    path.write_text(json.dumps({"version": 2, "board": board, "candidates": candidates}))
     return path
 
 
@@ -118,6 +152,15 @@ class AdmissionGuardTests(unittest.TestCase):
         self.assertFalse(result.allowed)
         self.assertIn("approved-candidate-missing:t_approved", result.reasons)
 
+    def test_rejects_empty_manifest_with_ready_task(self) -> None:
+        create_db(self.db, self.root, executable="ready", executable_id="t_approved")
+        write_manifest(self.root, [])
+
+        result = self.evaluate_read_only()
+
+        self.assertFalse(result.allowed)
+        self.assertIn("unknown-ready-task:t_approved", result.reasons)
+
     def test_rejects_missing_invalid_and_wrong_board_manifests(self) -> None:
         create_db(self.db, self.root, executable="ready", executable_id="t_approved")
         result = self.evaluate_read_only()
@@ -151,7 +194,7 @@ class AdmissionGuardTests(unittest.TestCase):
         result = self.evaluate_read_only()
         self.assertIn("approved-candidate-not-ready:t_first:todo", result.reasons)
 
-    def test_rejects_candidate_workspace_mismatch(self) -> None:
+    def test_rejects_task_policy_or_source_repo_mismatch(self) -> None:
         create_db(self.db, self.root, executable="ready", executable_id="t_approved")
         write_manifest(self.root, [candidate("t_approved", self.root)])
         con = sqlite3.connect(self.db)
@@ -160,6 +203,35 @@ class AdmissionGuardTests(unittest.TestCase):
         con.close()
         result = self.evaluate_read_only()
         self.assertIn("approved-candidate-workspace-mismatch:t_approved", result.reasons)
+
+        con = sqlite3.connect(self.db)
+        con.execute(
+            "UPDATE tasks SET workspace_kind = 'dir', workspace_path = ? WHERE id = 't_approved'",
+            (str(self.root),),
+        )
+        con.commit()
+        con.close()
+        result = self.evaluate_read_only()
+        self.assertIn("approved-candidate-workspace-mismatch:t_approved", result.reasons)
+
+    def test_rejects_missing_or_mismatched_feishu_subscription(self) -> None:
+        create_db(self.db, self.root, executable="ready", executable_id="t_approved")
+        write_manifest(self.root, [candidate("t_approved", self.root)])
+        con = sqlite3.connect(self.db)
+        con.execute("DELETE FROM kanban_notify_subs WHERE task_id = 't_approved'")
+        con.commit()
+        con.close()
+        result = self.evaluate_read_only()
+        self.assertIn("approved-candidate-feishu-subscription-mismatch:t_approved", result.reasons)
+
+        con = sqlite3.connect(self.db)
+        con.execute(
+            "INSERT INTO kanban_notify_subs VALUES ('t_approved', 'feishu', 'other-chat', 'thread-1', 'user-1', 'coder')"
+        )
+        con.commit()
+        con.close()
+        result = self.evaluate_read_only()
+        self.assertIn("approved-candidate-feishu-subscription-mismatch:t_approved", result.reasons)
 
     def test_root_workspace_is_not_an_execution_invariant(self) -> None:
         create_db(self.db, self.root, executable="ready", executable_id="t_approved")

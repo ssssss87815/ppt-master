@@ -49,8 +49,8 @@ class Admission:
 @dataclass(frozen=True)
 class ApprovedCandidate:
     task_id: str
-    workspace_kind: str
-    workspace_path: Path
+    source_repo: Path
+    feishu_subscription: tuple[str, str, str, str]
 
 
 def root_is_tracker_only(cur: sqlite3.Cursor) -> tuple[bool, str]:
@@ -100,26 +100,50 @@ def load_manifest(
         return None, f"manifest-invalid:{exc.__class__.__name__}"
     if not isinstance(payload, dict) or set(payload) != {"version", "board", "candidates"}:
         return None, "manifest-invalid:schema"
-    if payload["version"] != 1 or payload["board"] != board or not isinstance(payload["candidates"], list):
+    if payload["version"] != 2 or payload["board"] != board or not isinstance(payload["candidates"], list):
         return None, "manifest-invalid:schema"
 
     candidates: list[ApprovedCandidate] = []
     candidate_ids: set[str] = set()
     for item in payload["candidates"]:
-        if not isinstance(item, dict) or set(item) != {"task_id", "workspace_kind", "workspace_path"}:
+        if not isinstance(item, dict) or set(item) != {
+            "task_id",
+            "workspace_kind",
+            "source_repo",
+            "feishu_subscription",
+        }:
             return None, "manifest-invalid:candidate-schema"
         task_id = item["task_id"]
         workspace_kind = item["workspace_kind"]
-        workspace_path = item["workspace_path"]
+        source_repo = item["source_repo"]
+        subscription = item["feishu_subscription"]
         if not isinstance(task_id, str) or not task_id.startswith("t_") or task_id in candidate_ids:
             return None, "manifest-invalid:candidate-id"
-        if workspace_kind != "dir" or not isinstance(workspace_path, str):
+        if workspace_kind != "worktree" or not isinstance(source_repo, str):
             return None, "manifest-invalid:candidate-workspace"
-        path = Path(workspace_path)
+        path = Path(source_repo)
         if not path.is_absolute() or path.resolve() != repo_root:
             return None, "manifest-invalid:candidate-workspace"
+        if not isinstance(subscription, dict) or set(subscription) != {
+            "chat_id",
+            "thread_id",
+            "user_id",
+            "notifier_profile",
+        } or not all(isinstance(subscription[key], str) for key in subscription) or not subscription["chat_id"]:
+            return None, "manifest-invalid:candidate-subscription"
         candidate_ids.add(task_id)
-        candidates.append(ApprovedCandidate(task_id, workspace_kind, path))
+        candidates.append(
+            ApprovedCandidate(
+                task_id,
+                path,
+                (
+                    subscription["chat_id"],
+                    subscription["thread_id"],
+                    subscription["user_id"],
+                    subscription["notifier_profile"],
+                ),
+            )
+        )
     return tuple(candidates), None
 
 
@@ -150,8 +174,15 @@ def approved_candidate(
             return None, (f"approved-candidate-not-ready:{candidate.task_id}:{status}",)
         if ready[0] != candidate.task_id:
             return None, (f"unknown-ready-task:{ready[0]}",)
-        if workspace_kind != candidate.workspace_kind or workspace_path != str(candidate.workspace_path):
+        if workspace_kind != "worktree" or workspace_path != str(candidate.source_repo):
             return None, (f"approved-candidate-workspace-mismatch:{candidate.task_id}",)
+        subscriptions = cur.execute(
+            "SELECT chat_id, thread_id, COALESCE(user_id, ''), COALESCE(notifier_profile, '') "
+            "FROM kanban_notify_subs WHERE task_id = ? AND platform = 'feishu'",
+            (candidate.task_id,),
+        ).fetchall()
+        if len(subscriptions) != 1 or tuple(subscriptions[0]) != candidate.feishu_subscription:
+            return None, (f"approved-candidate-feishu-subscription-mismatch:{candidate.task_id}",)
         return candidate.task_id, ()
 
     return None, (f"unknown-ready-task:{ready[0]}",)
