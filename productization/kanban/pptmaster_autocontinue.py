@@ -77,7 +77,10 @@ def executable_task_count(cur: sqlite3.Cursor) -> int:
 def evaluate_admission(db_path: Path = DB, repo_root: Path = REPO_ROOT) -> Admission:
     """Evaluate dispatch admission without changing the database or filesystem."""
     reasons: list[str] = []
-    free = free_gib(repo_root)
+    try:
+        free = free_gib(repo_root)
+    except OSError as exc:
+        return Admission(False, (f"repo-root-unreadable:{exc.__class__.__name__}",), None, None)
     if free < MIN_FREE_GIB:
         reasons.append(f"disk-below-minimum:{free:.2f}GiB<{MIN_FREE_GIB:.2f}GiB")
     if not db_path.exists():
