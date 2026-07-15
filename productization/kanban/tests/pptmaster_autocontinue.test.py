@@ -1,62 +1,106 @@
 #!/usr/bin/env python3
-"""Regression tests for the PPT Master Kanban guard policy."""
+"""Behavioral tests for the read-only PPT Master admission guard."""
 
-import ast
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import sqlite3
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[3]
+RUNNER = ROOT / "productization/kanban/pptmaster_autocontinue.py"
+SPEC = importlib.util.spec_from_file_location("pptmaster_autocontinue", RUNNER)
+assert SPEC and SPEC.loader
+MODULE = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = MODULE
+SPEC.loader.exec_module(MODULE)
 
-SCRIPT = Path(__file__).resolve().parents[1] / "pptmaster_autocontinue.py"
-source = SCRIPT.read_text(encoding="utf-8")
-tree = ast.parse(source)
-functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
 
-assert "spawn_next" not in functions, "guard must not dynamically create successors"
-assert "latest_done_with_successor" not in functions, "guard must not infer successors from completed cards"
-assert "lane_body" not in functions, "guard must not manufacture task bodies"
-assert "candidate_seen_recently" not in functions, "guard must not dedupe dynamically created work"
-assert "existing_open_title" not in functions, "guard must not search for dynamically created work"
+def create_db(path: Path, root_status: str = "blocked", executable: str | None = None) -> None:
+    con = sqlite3.connect(path)
+    con.executescript(
+        """
+        CREATE TABLE tasks (
+            id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            claim_lock TEXT,
+            worker_pid INTEGER
+        );
+        CREATE TABLE task_links (parent_id TEXT NOT NULL, child_id TEXT NOT NULL);
+        """
+    )
+    con.execute(
+        "INSERT INTO tasks(id, status, claim_lock, worker_pid) VALUES (?, ?, NULL, NULL)",
+        ("t_a4281740", root_status),
+    )
+    if executable:
+        con.execute(
+            "INSERT INTO tasks(id, status, claim_lock, worker_pid) VALUES (?, ?, NULL, NULL)",
+            ("t_probe", executable),
+        )
+    con.commit()
+    con.close()
 
-assert "ASSIGNEE = os.environ.get(\"PPTMASTER_KANBAN_ASSIGNEE\", \"default\")" in source
 
-main = functions["main"]
-main_calls = {
-    node.func.id
-    for node in ast.walk(main)
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-}
-assert "root_is_clean" in main_calls
-assert "autoclose_latest" in main_calls
-assert "spawn_next" not in main_calls
-assert "extract_candidate" not in main_calls
+def assert_guard_is_read_only(db: Path, repo: Path) -> None:
+    before = db.read_bytes()
+    original_minimum = MODULE.MIN_FREE_GIB
+    MODULE.MIN_FREE_GIB = 0
+    try:
+        result = MODULE.evaluate_admission(db, repo)
+    finally:
+        MODULE.MIN_FREE_GIB = original_minimum
+    assert db.read_bytes() == before, "admission guard must not mutate the board DB"
+    assert result.allowed is True
+    assert result.executable_tasks == 0
 
-root = functions["root_is_clean"]
-root_source = ast.get_source_segment(source, root) or ""
-assert 'status == "blocked"' in root_source
-assert 'block_kind in {"needs_input", "waiting_dependency"}' in root_source
-assert '"SELECT COUNT(*) FROM task_links WHERE child_id = ?"' in root_source
 
-candidate = functions["latest_autoclose_candidate"]
-candidate_source = ast.get_source_segment(source, candidate) or ""
-assert 'SELECT tr.summary' in candidate_source
-assert 'WHERE tr.task_id = t.id' in candidate_source
-assert 'ORDER BY tr.id DESC' in candidate_source
-assert 'ORDER BY tc.id DESC' in candidate_source
-assert "t.block_kind = 'needs_input'" not in candidate_source
-assert 'LEFT JOIN task_runs tr ON tr.id = t.current_run_id' not in candidate_source
-assert 'ORDER BY tc.id ASC' not in candidate_source
-assert 'reversed(list(re.finditer' in source
-assert '### Changed files' in source
-assert '### Verification commands' in source
+def main() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        db = root / "kanban.db"
+        create_db(db)
+        assert_guard_is_read_only(db, root)
 
-policy = functions["should_autoclose"]
-policy_source = ast.get_source_segment(source, policy) or ""
-assert '"review-required"' in policy_source
-assert "extract_changed_files" in policy_source
-assert "extract_verification_commands" in policy_source
-assert "allowed_changed_files" in policy_source
-assert "commands_allowed" in policy_source
+        db.unlink()
+        create_db(db, executable="running")
+        result = MODULE.evaluate_admission(db, root)
+        assert result.allowed is False
+        assert "recovery-quarantine-executable-tasks:1" in result.reasons
 
-assert "unlinked successor" not in source
-assert "kanban --board {board} create" not in source
+        db.unlink()
+        create_db(db, root_status="ready")
+        result = MODULE.evaluate_admission(db, root)
+        assert result.allowed is False
+        assert "root-status-ready" in result.reasons
 
-print("pptmaster autocontinue policy test: no dynamic successor creation; root invariant and review handoff gates present")
+        # CLI is status-only and never invokes hermes lifecycle commands.
+        env = os.environ | {
+            "PPTMASTER_REPO_ROOT": str(root),
+            "HERMES_KANBAN_ROOT": str(root),
+            "HERMES_KANBAN_BOARD": ".",
+            "PPTMASTER_MIN_FREE_GIB": "0",
+        }
+        db.rename(root / "kanban.db") if db.name != "kanban.db" else None
+        proc = subprocess.run([sys.executable, str(RUNNER)], env=env, text=True, capture_output=True)
+        assert proc.returncode == 2
+        payload = json.loads(proc.stdout)
+        assert payload["mode"] == "read-only-admission"
+        assert payload["allowed"] is False
+        assert "root-status-ready" in payload["reasons"]
+
+    source = RUNNER.read_text()
+    forbidden = ("kanban complete", "kanban claim", "kanban promote", "kanban reclaim", "kanban dispatch")
+    for token in forbidden:
+        assert token not in source, f"guard must not contain lifecycle mutation: {token}"
+
+    print("pptmaster admission guard tests: PASS")
+
+
+if __name__ == "__main__":
+    main()
