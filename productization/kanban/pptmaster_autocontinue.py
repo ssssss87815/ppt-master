@@ -23,6 +23,7 @@ BOARD_ROOT = Path(os.environ.get("HERMES_KANBAN_ROOT", "/home/ubuntu/.hermes/kan
 DB = BOARD_ROOT / BOARD / "kanban.db"
 MIN_FREE_GIB = float(os.environ.get("PPTMASTER_MIN_FREE_GIB", "6"))
 MANIFEST_NAME = "approved-dispatch-manifest.json"
+ROOT_TASK_ID = "t_a4281740"
 
 
 @dataclass(frozen=True)
@@ -52,31 +53,29 @@ class ApprovedCandidate:
     workspace_path: Path
 
 
-def root_is_tracker_only(cur: sqlite3.Cursor, repo_root: Path) -> tuple[bool, str]:
+def root_is_tracker_only(cur: sqlite3.Cursor) -> tuple[bool, str]:
+    """Validate tracker lifecycle invariants, not implementation workspace data.
+
+    The root is deliberately a blocked, comment-only tracker. It can be a
+    legacy record with no workspace (or one from an older workspace policy),
+    so workspace ownership is never part of its execution invariant.
+    """
     row = cur.execute(
-        "SELECT status, claim_lock, worker_pid, workspace_kind, workspace_path "
-        "FROM tasks WHERE id = ?",
-        ("t_a4281740",),
+        "SELECT status, claim_lock, worker_pid FROM tasks WHERE id = ?",
+        (ROOT_TASK_ID,),
     ).fetchone()
     if row is None:
         return False, "root-missing"
-    status, claim_lock, worker_pid, workspace_kind, workspace_path = row
+    status, claim_lock, worker_pid = row
     if status != "blocked":
         return False, f"root-status-{status}"
     if claim_lock is not None or worker_pid is not None:
         return False, "root-has-execution-lock"
-    if workspace_kind != "dir" or workspace_path != str(repo_root):
-        return False, "root-workspace-mismatch"
     incoming = cur.execute(
-        "SELECT COUNT(*) FROM task_links WHERE child_id = ?", ("t_a4281740",)
+        "SELECT COUNT(*) FROM task_links WHERE child_id = ?", (ROOT_TASK_ID,)
     ).fetchone()[0]
     if incoming:
         return False, "root-has-incoming-dependency"
-    outgoing = cur.execute(
-        "SELECT COUNT(*) FROM task_links WHERE parent_id = ?", ("t_a4281740",)
-    ).fetchone()[0]
-    if outgoing:
-        return False, "root-has-outgoing-dependency"
     return True, "ok"
 
 
@@ -191,7 +190,7 @@ def evaluate_admission(
         if integrity != "ok":
             reasons.append(f"board-integrity-{integrity}")
             return Admission(False, tuple(reasons), free, None)
-        root_ok, root_reason = root_is_tracker_only(cur, repo_root)
+        root_ok, root_reason = root_is_tracker_only(cur)
         if not root_ok:
             reasons.append(root_reason)
         executable = executable_task_count(cur)

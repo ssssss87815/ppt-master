@@ -151,7 +151,7 @@ class AdmissionGuardTests(unittest.TestCase):
         result = self.evaluate_read_only()
         self.assertIn("approved-candidate-not-ready:t_first:todo", result.reasons)
 
-    def test_rejects_candidate_and_root_workspace_mismatches(self) -> None:
+    def test_rejects_candidate_workspace_mismatch(self) -> None:
         create_db(self.db, self.root, executable="ready", executable_id="t_approved")
         write_manifest(self.root, [candidate("t_approved", self.root)])
         con = sqlite3.connect(self.db)
@@ -161,12 +161,16 @@ class AdmissionGuardTests(unittest.TestCase):
         result = self.evaluate_read_only()
         self.assertIn("approved-candidate-workspace-mismatch:t_approved", result.reasons)
 
+    def test_root_workspace_is_not_an_execution_invariant(self) -> None:
+        create_db(self.db, self.root, executable="ready", executable_id="t_approved")
+        write_manifest(self.root, [candidate("t_approved", self.root)])
         con = sqlite3.connect(self.db)
-        con.execute("UPDATE tasks SET workspace_path = ? WHERE id = 't_a4281740'", (str(self.root / "other"),))
+        con.execute("UPDATE tasks SET workspace_path = ?, workspace_kind = 'scratch' WHERE id = 't_a4281740'", (str(self.root / "legacy"),))
         con.commit()
         con.close()
         result = self.evaluate_read_only()
-        self.assertIn("root-workspace-mismatch", result.reasons)
+        self.assertTrue(result.allowed)
+        self.assertEqual(result.candidate_id, "t_approved")
 
     def test_rejects_root_status_lock_and_dependency_constraints(self) -> None:
         cases = (
