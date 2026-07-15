@@ -1,5 +1,17 @@
 {
   "version": 2,
   "board": "ppt-master-productization-mainline",
-  "candidates": []
+  "candidates": [
+    {
+      "task_id": "t_4c93e2d4",
+      "workspace_kind": "worktree",
+      "source_repo": "/home/ubuntu/projects/ppt-master-upstream",
+      "feishu_subscription": {
+        "chat_id": "oc_6d9a780da249248a301edda6daae48c9",
+        "thread_id": "",
+        "user_id": "ou_8b7e40ea583d07d66bd9d6cd5f9588d7",
+        "notifier_profile": "default"
+      }
+    }
+  ]
 }
