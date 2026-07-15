@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the fail-closed, read-only PPT Master admission guard."""
+"""Tests for the manifest-gated, read-only PPT Master admission guard."""
 
 from __future__ import annotations
 
@@ -24,10 +24,12 @@ SPEC.loader.exec_module(MODULE)
 
 def create_db(
     path: Path,
+    repo_root: Path,
     *,
     root_status: str = "blocked",
     root_lock: str | None = None,
     executable: str | None = None,
+    executable_id: str = "t_probe",
     root_incoming: bool = False,
 ) -> None:
     con = sqlite3.connect(path)
@@ -37,19 +39,23 @@ def create_db(
             id TEXT PRIMARY KEY,
             status TEXT NOT NULL,
             claim_lock TEXT,
-            worker_pid INTEGER
+            worker_pid INTEGER,
+            workspace_kind TEXT NOT NULL,
+            workspace_path TEXT NOT NULL
         );
         CREATE TABLE task_links (parent_id TEXT NOT NULL, child_id TEXT NOT NULL);
         """
     )
     con.execute(
-        "INSERT INTO tasks(id, status, claim_lock, worker_pid) VALUES (?, ?, ?, NULL)",
-        ("t_a4281740", root_status, root_lock),
+        "INSERT INTO tasks(id, status, claim_lock, worker_pid, workspace_kind, workspace_path) "
+        "VALUES (?, ?, ?, NULL, 'dir', ?)",
+        ("t_a4281740", root_status, root_lock, str(repo_root)),
     )
     if executable:
         con.execute(
-            "INSERT INTO tasks(id, status, claim_lock, worker_pid) VALUES (?, ?, NULL, NULL)",
-            ("t_probe", executable),
+            "INSERT INTO tasks(id, status, claim_lock, worker_pid, workspace_kind, workspace_path) "
+            "VALUES (?, ?, NULL, NULL, 'dir', ?)",
+            (executable_id, executable, str(repo_root)),
         )
     if root_incoming:
         con.execute("INSERT INTO task_links(parent_id, child_id) VALUES (?, ?)", ("t_probe", "t_a4281740"))
@@ -57,11 +63,22 @@ def create_db(
     con.close()
 
 
+def candidate(task_id: str, root: Path) -> dict[str, str]:
+    return {"task_id": task_id, "workspace_kind": "dir", "workspace_path": str(root)}
+
+
+def write_manifest(root: Path, candidates: list[dict[str, str]], board: str = MODULE.BOARD) -> Path:
+    path = root / "approved-dispatch-manifest.json"
+    path.write_text(json.dumps({"version": 1, "board": board, "candidates": candidates}))
+    return path
+
+
 class AdmissionGuardTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.db = self.root / "kanban.db"
+        self.manifest = self.root / "approved-dispatch-manifest.json"
         self.original_minimum = MODULE.MIN_FREE_GIB
         MODULE.MIN_FREE_GIB = 0
 
@@ -71,28 +88,87 @@ class AdmissionGuardTests(unittest.TestCase):
 
     def evaluate_read_only(self):
         before = self.db.read_bytes() if self.db.exists() else None
-        result = MODULE.evaluate_admission(self.db, self.root)
+        result = MODULE.evaluate_admission(self.db, self.root, self.manifest)
         if before is not None:
             self.assertEqual(self.db.read_bytes(), before, "guard must never mutate the board DB")
         return result
 
-    def test_allows_clean_tracker_only_board_without_executable_tasks(self) -> None:
-        create_db(self.db)
+    def test_allows_exact_first_approved_ready_candidate_without_writes(self) -> None:
+        create_db(self.db, self.root, executable="ready", executable_id="t_approved")
+        write_manifest(self.root, [candidate("t_approved", self.root)])
+
         result = self.evaluate_read_only()
+
         self.assertTrue(result.allowed)
-        self.assertEqual(result.executable_tasks, 0)
+        self.assertEqual(result.executable_tasks, 1)
+        self.assertEqual(result.candidate_id, "t_approved")
         self.assertEqual(result.reasons, ())
 
-    def test_quarantines_ready_and_running_tasks(self) -> None:
-        for status in ("ready", "running"):
-            with self.subTest(status=status):
-                self.db.unlink(missing_ok=True)
-                create_db(self.db, executable=status)
-                result = self.evaluate_read_only()
-                self.assertFalse(result.allowed)
-                self.assertIn("recovery-quarantine-executable-tasks:1", result.reasons)
+    def test_rejects_legacy_running_and_unknown_ready_tasks(self) -> None:
+        create_db(self.db, self.root, executable="running", executable_id="t_legacy")
+        write_manifest(self.root, [])
+        result = self.evaluate_read_only()
+        self.assertFalse(result.allowed)
+        self.assertIn("legacy-running-tasks:t_legacy", result.reasons)
 
-    def test_rejects_root_status_lock_and_incoming_dependency(self) -> None:
+        self.db.unlink()
+        create_db(self.db, self.root, executable="ready", executable_id="t_unknown")
+        write_manifest(self.root, [candidate("t_approved", self.root)])
+        result = self.evaluate_read_only()
+        self.assertFalse(result.allowed)
+        self.assertIn("approved-candidate-missing:t_approved", result.reasons)
+
+    def test_rejects_missing_invalid_and_wrong_board_manifests(self) -> None:
+        create_db(self.db, self.root, executable="ready", executable_id="t_approved")
+        result = self.evaluate_read_only()
+        self.assertIn("manifest-missing", result.reasons)
+
+        self.manifest.write_text("not json")
+        result = self.evaluate_read_only()
+        self.assertTrue(any(reason.startswith("manifest-invalid:") for reason in result.reasons))
+
+        write_manifest(self.root, [candidate("t_approved", self.root)], board="wrong-board")
+        result = self.evaluate_read_only()
+        self.assertIn("manifest-invalid:schema", result.reasons)
+
+    def test_rejects_multiple_ready_and_sequence_violations(self) -> None:
+        create_db(self.db, self.root, executable="ready", executable_id="t_second")
+        con = sqlite3.connect(self.db)
+        con.execute("INSERT INTO tasks VALUES ('t_first', 'todo', NULL, NULL, 'dir', ?)", (str(self.root),))
+        con.execute("INSERT INTO tasks VALUES ('t_extra', 'ready', NULL, NULL, 'dir', ?)", (str(self.root),))
+        con.commit()
+        con.close()
+        write_manifest(self.root, [candidate("t_first", self.root), candidate("t_second", self.root)])
+
+        result = self.evaluate_read_only()
+        self.assertFalse(result.allowed)
+        self.assertIn("multiple-or-missing-ready-tasks:2", result.reasons)
+
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE tasks SET status = 'todo' WHERE id = 't_extra'")
+        con.commit()
+        con.close()
+        result = self.evaluate_read_only()
+        self.assertIn("approved-candidate-not-ready:t_first:todo", result.reasons)
+
+    def test_rejects_candidate_and_root_workspace_mismatches(self) -> None:
+        create_db(self.db, self.root, executable="ready", executable_id="t_approved")
+        write_manifest(self.root, [candidate("t_approved", self.root)])
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE tasks SET workspace_path = ? WHERE id = 't_approved'", (str(self.root / "other"),))
+        con.commit()
+        con.close()
+        result = self.evaluate_read_only()
+        self.assertIn("approved-candidate-workspace-mismatch:t_approved", result.reasons)
+
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE tasks SET workspace_path = ? WHERE id = 't_a4281740'", (str(self.root / "other"),))
+        con.commit()
+        con.close()
+        result = self.evaluate_read_only()
+        self.assertIn("root-workspace-mismatch", result.reasons)
+
+    def test_rejects_root_status_lock_and_dependency_constraints(self) -> None:
         cases = (
             ({"root_status": "ready"}, "root-status-ready"),
             ({"root_lock": "worker-lock"}, "root-has-execution-lock"),
@@ -101,13 +177,15 @@ class AdmissionGuardTests(unittest.TestCase):
         for kwargs, reason in cases:
             with self.subTest(reason=reason):
                 self.db.unlink(missing_ok=True)
-                create_db(self.db, **kwargs)
+                create_db(self.db, self.root, **kwargs)
+                write_manifest(self.root, [])
                 result = self.evaluate_read_only()
                 self.assertFalse(result.allowed)
                 self.assertIn(reason, result.reasons)
 
     def test_rejects_missing_corrupt_and_unreadable_repo_inputs(self) -> None:
-        result = MODULE.evaluate_admission(self.db, self.root)
+        write_manifest(self.root, [])
+        result = self.evaluate_read_only()
         self.assertFalse(result.allowed)
         self.assertIn("board-db-missing", result.reasons)
 
@@ -116,13 +194,14 @@ class AdmissionGuardTests(unittest.TestCase):
         self.assertFalse(result.allowed)
         self.assertTrue(any(reason.startswith("board-unreadable:") for reason in result.reasons))
 
-        result = MODULE.evaluate_admission(self.db, self.root / "missing-repo")
+        result = MODULE.evaluate_admission(self.db, self.root / "missing-repo", self.manifest)
         self.assertFalse(result.allowed)
         self.assertEqual(result.free_gib, None)
         self.assertTrue(any(reason.startswith("repo-root-unreadable:") for reason in result.reasons))
 
     def test_rejects_insufficient_disk_before_board_admission(self) -> None:
-        create_db(self.db)
+        create_db(self.db, self.root)
+        write_manifest(self.root, [])
         MODULE.MIN_FREE_GIB = 10**9
         result = self.evaluate_read_only()
         self.assertFalse(result.allowed)
